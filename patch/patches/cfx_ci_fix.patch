@@ -1,8 +1,8 @@
 diff --git cef/tools/make_distrib.py cef/tools/make_distrib.py
-index 963167a49f9463046dc4ac47517c2401f4b260f8..5ff47cb96b114b43f9a39e06491df72d62c65f31 100644
+index aa921067f..1de62d297 100644
 --- cef/tools/make_distrib.py
 +++ cef/tools/make_distrib.py
-@@ -334,7 +334,7 @@ def transfer_tools_files(script_dir, build_dirs, output_dir):
+@@ -349,7 +349,7 @@ def transfer_tools_files(script_dir, build_dirs, output_dir):
          if len(file_name) == 0:
            raise Exception('Failed to parse %s command component: %s' % (mksnapshot_name, cmd))
          if cmd.startswith('../../'):
@@ -11,7 +11,7 @@ index 963167a49f9463046dc4ac47517c2401f4b260f8..5ff47cb96b114b43f9a39e06491df72d
            # Validate input file/path.
            if not file_path.startswith(src_dir):
              raise Exception('Invalid %s command input file: %s' % (mksnapshot_name, file_path))
-@@ -793,10 +793,10 @@ if options.ozone and platform != 'linux':
+@@ -727,10 +727,10 @@ if (options.nosymbols and any(symbols_only_options)) or sum(symbols_only_options
  script_dir = os.path.dirname(__file__)
  
  # CEF root directory

@@ -1,8 +1,8 @@
 diff --git cef/libcef/browser/net_service/proxy_url_loader_factory.cc cef/libcef/browser/net_service/proxy_url_loader_factory.cc
-index 7b88f9f72..fca9ed839 100644
+index 115553d6e..55e4a5eed 100644
 --- cef/libcef/browser/net_service/proxy_url_loader_factory.cc
 +++ cef/libcef/browser/net_service/proxy_url_loader_factory.cc
-@@ -518,15 +518,6 @@ void InterceptedRequest::Restart() {
+@@ -516,15 +516,7 @@ void InterceptedRequest::Restart() {
              : network::mojom::CredentialsMode::kOmit;
    }
  
@@ -15,14 +15,7 @@ index 7b88f9f72..fca9ed839 100644
 -       request_.method != net::HttpRequestHeaders::kHeadMethod);
 -
 -  if (should_add_origin_header) {
++  {
      // Match logic in navigation_request.cc AddAdditionalRequestHeaders.
      url::Origin origin_header_value =
          request_.request_initiator.value_or(url::Origin());
-@@ -537,7 +528,6 @@ void InterceptedRequest::Restart() {
- 
-     request_.headers.SetHeaderIfMissing(net::HttpRequestHeaders::kOrigin,
-                                         origin_header_value.Serialize());
--  }
- 
-   const GURL original_url = request_.url;
- 

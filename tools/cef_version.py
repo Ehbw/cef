@@ -45,6 +45,7 @@ class VersionFormatter:
   def get_chrome_version_components(self):
     """ Returns Chrome version components. """
     if not bool(self._chrome_version):
+      print(self.src_path)
       file_path = os.path.join(self.src_path, 'chrome', 'VERSION')
       assert os.path.isfile(file_path), file_path
       assert read_version_file(file_path, self._chrome_version), file_path

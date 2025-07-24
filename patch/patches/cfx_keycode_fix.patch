@@ -1,5 +1,5 @@
 diff --git cef/libcef/browser/native/browser_platform_delegate_native_win.cc cef/libcef/browser/native/browser_platform_delegate_native_win.cc
-index 0651d382b..4663d5870 100644
+index fcabd4e5e..17547bdb0 100644
 --- cef/libcef/browser/native/browser_platform_delegate_native_win.cc
 +++ cef/libcef/browser/native/browser_platform_delegate_native_win.cc
 @@ -25,6 +25,7 @@
@@ -10,7 +10,7 @@ index 0651d382b..4663d5870 100644
  #include "ui/display/win/screen_win.h"
  #include "ui/events/keycodes/dom/dom_key.h"
  #include "ui/events/keycodes/dom/keycode_converter.h"
-@@ -432,7 +433,9 @@ ui::KeyEvent CefBrowserPlatformDelegateNativeWin::TranslateUiKeyEvent(
+@@ -454,7 +455,9 @@ ui::KeyEvent CefBrowserPlatformDelegateNativeWin::TranslateUiKeyEvent(
    ui::KeyboardCode key_code =
        ui::KeyboardCodeForWindowsKeyCode(key_event.windows_key_code);
    ui::DomCode dom_code =
@@ -21,8 +21,8 @@ index 0651d382b..4663d5870 100644
    base::TimeTicks time_stamp = GetEventTimeStamp();
  
    if (key_event.type == KEYEVENT_CHAR) {
-@@ -453,6 +456,15 @@ ui::KeyEvent CefBrowserPlatformDelegateNativeWin::TranslateUiKeyEvent(
-       DCHECK(false);
+@@ -462,6 +465,15 @@ ui::KeyEvent CefBrowserPlatformDelegateNativeWin::TranslateUiKeyEvent(
+                                        key_code, dom_code, flags, time_stamp);
    }
  
 +  // Chrome set's repeat flag only for keydown event.
@@ -34,6 +34,6 @@ index 0651d382b..4663d5870 100644
 +    }
 +  }
 +
-   ui::DomKey dom_key =
-       ui::PlatformKeyMap::DomKeyFromKeyboardCode(key_code, &flags);
-   return ui::KeyEvent(type, key_code, dom_code, flags, dom_key, time_stamp);
+   ui::EventType type = ui::EventType::kUnknown;
+   switch (key_event.type) {
+     case KEYEVENT_RAWKEYDOWN:

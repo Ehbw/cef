@@ -1,0 +1,13 @@
+diff --git cef/tools/cef_version.py cef/tools/cef_version.py
+index 1e38ac7ab..b3ade3d62 100644
+--- cef/tools/cef_version.py
++++ cef/tools/cef_version.py
+@@ -45,7 +45,7 @@ class VersionFormatter:
+   def get_chrome_version_components(self):
+     """ Returns Chrome version components. """
+     if not bool(self._chrome_version):
+-      file_path = os.path.join(self.src_path, 'chrome', 'VERSION')
++      file_path = os.path.join(self.src_path, 'chromium', 'src', 'chrome', 'VERSION')
+       assert os.path.isfile(file_path), file_path
+       assert read_version_file(file_path, self._chrome_version), file_path
+     return self._chrome_version

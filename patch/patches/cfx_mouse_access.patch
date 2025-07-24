@@ -1,16 +1,8 @@
 diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.cc cef/libcef/browser/alloy/alloy_browser_host_impl.cc
-index d5ba002dc..61a1f8b67 100644
+index b16db08c1..383202967 100644
 --- cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 +++ cef/libcef/browser/alloy/alloy_browser_host_impl.cc
-@@ -33,6 +33,7 @@
- #include "cef/libcef/common/values_impl.h"
- #include "chrome/browser/file_select_helper.h"
- #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
-+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
- #include "chrome/common/webui_url_constants.h"
- #include "components/input/native_web_keyboard_event.h"
- #include "components/printing/browser/print_composite_client.h"
-@@ -1237,6 +1238,49 @@ void AlloyBrowserHostImpl::ResizeDueToAutoResize(content::WebContents* source,
+@@ -1190,6 +1190,49 @@ void AlloyBrowserHostImpl::ResizeDueToAutoResize(content::WebContents* source,
    UpdatePreferredSize(source, new_size);
  }
  
@@ -60,7 +52,7 @@ index d5ba002dc..61a1f8b67 100644
  void AlloyBrowserHostImpl::RequestMediaAccessPermission(
      content::WebContents* web_contents,
      const content::MediaStreamRequest& request,
-@@ -1373,6 +1417,38 @@ void AlloyBrowserHostImpl::WebContentsDestroyed() {
+@@ -1329,6 +1372,39 @@ void AlloyBrowserHostImpl::WebContentsDestroyed() {
    }
  }
  
@@ -96,10 +88,11 @@ index d5ba002dc..61a1f8b67 100644
 +  return false;
 +}
 +
++
  void AlloyBrowserHostImpl::StartAudioCapturer() {
    if (!client_.get() || audio_capturer_) {
      return;
-@@ -1396,6 +1472,10 @@ void AlloyBrowserHostImpl::StartAudioCapturer() {
+@@ -1352,6 +1428,11 @@ void AlloyBrowserHostImpl::StartAudioCapturer() {
        std::make_unique<CefAudioCapturer>(params, this, audio_handler);
  }
  
@@ -107,21 +100,22 @@ index d5ba002dc..61a1f8b67 100644
 +    base_(base),
 +    exclusive_access_manager_(std::make_unique<ExclusiveAccessManager>(this)) {}
 +
++
  // AlloyBrowserHostImpl private methods.
  // -----------------------------------------------------------------------------
  
-@@ -1414,7 +1494,8 @@ AlloyBrowserHostImpl::AlloyBrowserHostImpl(
+@@ -1369,7 +1450,8 @@ AlloyBrowserHostImpl::AlloyBrowserHostImpl(
+                          browser_info,
                           request_context),
        content::WebContentsObserver(web_contents),
-       opener_(kNullWindowHandle),
 -      is_windowless_(platform_delegate_->IsWindowless()) {
 +      is_windowless_(platform_delegate_->IsWindowless()),
 +      exclusive_access_context_impl_(std::make_unique<CfxExclusiveAccessContextImpl>(this)) {
    contents_delegate_.ObserveWebContents(web_contents);
  
-   if (opener.get() && !is_views_hosted_) {
+   if (opener.get()) {
 diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.h cef/libcef/browser/alloy/alloy_browser_host_impl.h
-index 6d3acc82e..a9b072c8d 100644
+index c208f08ed..3e3877cd5 100644
 --- cef/libcef/browser/alloy/alloy_browser_host_impl.h
 +++ cef/libcef/browser/alloy/alloy_browser_host_impl.h
 @@ -20,6 +20,7 @@
@@ -132,14 +126,14 @@ index 6d3acc82e..a9b072c8d 100644
  #include "content/public/browser/web_contents.h"
  #include "content/public/browser/web_contents_delegate.h"
  #include "content/public/browser/web_contents_observer.h"
-@@ -27,6 +28,33 @@
+@@ -27,6 +28,35 @@
  class CefAudioCapturer;
  class CefBrowserInfo;
  class SiteInstance;
 +class ExclusiveAccessManager;
 +
 +class CfxExclusiveAccessContextImpl : public ExclusiveAccessContext {
-+ public:
++public:
 +  CfxExclusiveAccessContextImpl(CefBrowserHostBase* base);
 +
 +  // ExclusiveAccessContext methods.
@@ -159,14 +153,16 @@ index 6d3acc82e..a9b072c8d 100644
 +
 +  ExclusiveAccessManager* get_manager() { return exclusive_access_manager_.get(); }
 +
-+ private:
++private:
 +  CefBrowserHostBase* base_;
 +  std::unique_ptr<ExclusiveAccessManager> exclusive_access_manager_;
-+};
++}
++
++
  
  // CefBrowser implementation for Alloy style. Method calls are delegated to the
  // CefPlatformDelegate or the WebContents as appropriate. All methods are
-@@ -259,6 +287,17 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
+@@ -259,6 +289,17 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
                             const gfx::Size& pref_size) override;
    void ResizeDueToAutoResize(content::WebContents* source,
                               const gfx::Size& new_size) override;
@@ -184,10 +180,11 @@ index 6d3acc82e..a9b072c8d 100644
    void RequestMediaAccessPermission(
        content::WebContents* web_contents,
        const content::MediaStreamRequest& request,
-@@ -338,6 +377,7 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
+@@ -339,6 +380,8 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
    // starts running when a tab stops being audible, and is canceled if it starts
    // being audible again before it fires.
    std::unique_ptr<base::OneShotTimer> recently_audible_timer_;
++
 +  std::unique_ptr<CfxExclusiveAccessContextImpl> exclusive_access_context_impl_;
  };
  
