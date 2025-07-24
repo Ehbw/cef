@@ -1,0 +1,12 @@
+diff --git services/network/sec_header_helpers.cc services/network/sec_header_helpers.cc
+index 951fe93875bfd..fb5c1ed030a44 100644
+--- services/network/sec_header_helpers.cc
++++ services/network/sec_header_helpers.cc
+@@ -166,6 +166,7 @@ void SetFetchMetadataHeaders(
+     const GURL* pending_redirect_url,
+     const mojom::URLLoaderFactoryParams& factory_params,
+     const cors::OriginAccessList& origin_access_list) {
++  return;
+   DCHECK(request);
+   DCHECK_NE(0u, request->url_chain().size());
+ 

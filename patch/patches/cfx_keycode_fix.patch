@@ -1,0 +1,39 @@
+diff --git cef/libcef/browser/native/browser_platform_delegate_native_win.cc cef/libcef/browser/native/browser_platform_delegate_native_win.cc
+index 0651d382b..4663d5870 100644
+--- cef/libcef/browser/native/browser_platform_delegate_native_win.cc
++++ cef/libcef/browser/native/browser_platform_delegate_native_win.cc
+@@ -25,6 +25,7 @@
+ #include "ui/base/win/shell.h"
+ #include "ui/display/display.h"
+ #include "ui/display/screen.h"
++#include "ui/events/event_utils.h"
+ #include "ui/display/win/screen_win.h"
+ #include "ui/events/keycodes/dom/dom_key.h"
+ #include "ui/events/keycodes/dom/keycode_converter.h"
+@@ -432,7 +433,9 @@ ui::KeyEvent CefBrowserPlatformDelegateNativeWin::TranslateUiKeyEvent(
+   ui::KeyboardCode key_code =
+       ui::KeyboardCodeForWindowsKeyCode(key_event.windows_key_code);
+   ui::DomCode dom_code =
+-      ui::KeycodeConverter::NativeKeycodeToDomCode(key_event.native_key_code);
++      ui::KeycodeConverter::NativeKeycodeToDomCode(
++        ui::GetScanCodeFromLParam(key_event.native_key_code)
++      );
+   base::TimeTicks time_stamp = GetEventTimeStamp();
+ 
+   if (key_event.type == KEYEVENT_CHAR) {
+@@ -453,6 +456,15 @@ ui::KeyEvent CefBrowserPlatformDelegateNativeWin::TranslateUiKeyEvent(
+       DCHECK(false);
+   }
+ 
++  // Chrome set's repeat flag only for keydown event.
++  if (type == ui::EventType::kKeyPressed) {
++    // Bit 30 of lParam represents the "previous key state". If set, the key
++    // was already down, therefore this is an auto-repeat.
++    if ((key_event.native_key_code & 0x40000000) != 0) {
++      flags |= ui::EF_IS_REPEAT;
++    }
++  }
++
+   ui::DomKey dom_key =
+       ui::PlatformKeyMap::DomKeyFromKeyboardCode(key_code, &flags);
+   return ui::KeyEvent(type, key_code, dom_code, flags, dom_key, time_stamp);
