@@ -80,21 +80,40 @@ index e63c88eb0..57effca48 100644
  void ChromeBrowserHostImpl::OnSetFocus(cef_focus_source_t source) {
    if (!CEF_CURRENTLY_ON_UIT()) {
      CEF_POST_TASK(CEF_UIT, base::BindOnce(&ChromeBrowserHostImpl::OnSetFocus,
+diff --git cef/libcef/browser/osr/browser_platform_delegate_osr.cc cef/libcef/browser/osr/browser_platform_delegate_osr.cc
+index 44e49530f..b951d89ca 100644
+--- cef/libcef/browser/osr/browser_platform_delegate_osr.cc
++++ cef/libcef/browser/osr/browser_platform_delegate_osr.cc
+@@ -244,6 +244,14 @@ bool CefBrowserPlatformDelegateOsr::IsHidden() const {
+   return true;
+ }
+ 
++void* CefBrowserPlatformDelegateOsr::LockFrame() {
++  CefRenderWidgetHostViewOSR* view = GetOSRHostView();
++  if (view) {
++    return view->LockFrame();
++  }
++  return nullptr;
++}
++
+ void CefBrowserPlatformDelegateOsr::NotifyScreenInfoChanged() {
+   CefRenderWidgetHostViewOSR* view = GetOSRHostView();
+   if (view) {
 diff --git cef/libcef/browser/osr/browser_platform_delegate_osr.h cef/libcef/browser/osr/browser_platform_delegate_osr.h
-index cdc84ed35..8d2c04c74 100644
+index cdc84ed35..e91a40eb8 100644
 --- cef/libcef/browser/osr/browser_platform_delegate_osr.h
 +++ cef/libcef/browser/osr/browser_platform_delegate_osr.h
 @@ -55,6 +55,8 @@ class CefBrowserPlatformDelegateOsr
    std::unique_ptr<CefMenuRunner> CreateMenuRunner() override;
    bool IsWindowless() const override;
    void WasHidden(bool hidden) override;
-+  virtual void* LockFrame();
++  void* LockFrame() override;
 +
    bool IsHidden() const override;
    void NotifyScreenInfoChanged() override;
    void Invalidate(cef_paint_element_type_t type) override;
 diff --git cef/libcef/browser/osr/render_widget_host_view_osr.cc cef/libcef/browser/osr/render_widget_host_view_osr.cc
-index 436ba3ab9..e1f259bfe 100644
+index 436ba3ab9..1f0cee3e1 100644
 --- cef/libcef/browser/osr/render_widget_host_view_osr.cc
 +++ cef/libcef/browser/osr/render_widget_host_view_osr.cc
 @@ -1615,6 +1615,14 @@ void CefRenderWidgetHostViewOSR::OnPaint(const gfx::Rect& damage_rect,
@@ -104,7 +123,7 @@ index 436ba3ab9..e1f259bfe 100644
 +void* CefRenderWidgetHostViewOSR::LockFrame() {
 +  if (video_consumer_)
 +  {
-+    return video_consumer_->LockFrame()
++    return video_consumer_->LockFrame();
 +  }
 +  return nullptr;
 +}
