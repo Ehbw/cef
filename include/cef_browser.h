@@ -688,6 +688,12 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
   ///
   /*--cef()--*/
   virtual bool IsWindowRenderingDisabled() = 0;
+ 
+  ///
+  /// Returns shared GPU frame handle.
+  ///
+  /*--cef()--*/
+  virtual void* LockFrame() = 0;
 
   ///
   /// Notify the browser that the widget has been resized. The browser will
