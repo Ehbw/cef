@@ -21,11 +21,11 @@ index 87556e7e0dc99..75c593e504747 100644
 +    // and GURL rejects such domains names.
 +    url::CanonHostInfo host_info;
 +    bool site_domain_is_safe =
-+      registerable_domain.empty() || registerable_domain == origin.host()
++      registerable_domain.empty() || registerable_domain == origin.host() ||
 +      registerable_domain ==
 +        CanonicalizeHost(registerable_domain, &host_info);
 +    if (!site_domain_is_safe)
-+        registerable_domain.clear();
++        registerable_domain = {};
    }
  
    // If origin's host's registrable domain is null, then return (origin's

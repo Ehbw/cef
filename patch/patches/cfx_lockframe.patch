@@ -1,20 +1,3 @@
-diff --git cef/include/cef_browser.h cef/include/cef_browser.h
-index d349e8620..bc79754a6 100644
---- cef/include/cef_browser.h
-+++ cef/include/cef_browser.h
-@@ -689,6 +689,12 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
-   /*--cef()--*/
-   virtual bool IsWindowRenderingDisabled() = 0;
- 
-+  ///
-+  /// Returns shared GPU frame handle.
-+  ///
-+  /*--cef()--*/
-+  virtual void* LockFrame() = 0;
-+
-   ///
-   /// Notify the browser that the widget has been resized. The browser will
-   /// first call CefRenderHandler::GetViewRect to get the new size and then call
 diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.cc cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 index b16db08c1..2c7106a86 100644
 --- cef/libcef/browser/alloy/alloy_browser_host_impl.cc
@@ -34,7 +17,7 @@ index b16db08c1..2c7106a86 100644
 +void* AlloyBrowserHostImpl::LockFrame() {
 +  if (platform_delegate_)
 +  {
-+    return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->LockFrame(); 
++    return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->LockFrame();
 +  }
 +  return nullptr;
 +}
@@ -119,7 +102,7 @@ index cdc84ed35..e91a40eb8 100644
    std::unique_ptr<CefMenuRunner> CreateMenuRunner() override;
    bool IsWindowless() const override;
    void WasHidden(bool hidden) override;
-+  void* LockFrame() override;
++  virtual void* LockFrame();
 +
    bool IsHidden() const override;
    void NotifyScreenInfoChanged() override;
@@ -173,12 +156,12 @@ index 72becc9d5..ab275c9ca 100644
 +    if (current_handle.is_null()) {
 +      return nullptr;
 +    }
-+    return current_handle.dxgi_handle.get();
++    return current_handle.dxgi_handle().buffer_handle();
 +  }
 +
 +  current_handle = std::move(new_handle);
 +  new_handle = gfx::GpuMemoryBufferHandle();
-+  return current_handle.dxgi_handle.get();
++  return current_handle.dxgi_handle().buffer_handle();
 +}
 +
  // Frame size values are as follows:
