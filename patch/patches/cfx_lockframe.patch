@@ -1,3 +1,20 @@
+diff --git cef/include/cef_browser.h cef/include/cef_browser.h
+index d349e8620..bc79754a6 100644
+--- cef/include/cef_browser.h
++++ cef/include/cef_browser.h
+@@ -689,6 +689,12 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
+   /*--cef()--*/
+   virtual bool IsWindowRenderingDisabled() = 0;
+ 
++  ///
++  /// Returns shared GPU frame handle.
++  ///
++  /*--cef()--*/
++  virtual void* LockFrame() = 0;
++
+   ///
+   /// Notify the browser that the widget has been resized. The browser will
+   /// first call CefRenderHandler::GetViewRect to get the new size and then call
 diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.cc cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 index b16db08c1..2c7106a86 100644
 --- cef/libcef/browser/alloy/alloy_browser_host_impl.cc
