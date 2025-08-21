@@ -9,8 +9,8 @@
 #include "cef/libcef/browser/browser_host_base.h"
 #include "cef/libcef/browser/browser_platform_delegate.h"
 #include "cef/libcef/browser/native/cursor_util.h"
+#include "cef/libcef/common/api_version_util.h"
 #include "cef/libcef/common/frame_util.h"
-#include "chrome/browser/ui/views/sad_tab_view.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -18,10 +18,13 @@
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/common/result_codes.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom.h"
@@ -145,6 +148,9 @@ content::WebContents* CefBrowserContentsDelegate::OpenURLFromTabEx(
 bool CefBrowserContentsDelegate::SetContentsBoundsEx(
     content::WebContents* source,
     const gfx::Rect& bounds) {
+  if (!CEF_API_IS_ADDED(13700)) {
+    return false;
+  }
   if (auto c = client()) {
     if (auto handler = c->GetDisplayHandler()) {
       return handler->OnContentsBoundsChange(
@@ -430,8 +436,9 @@ void CefBrowserContentsDelegate::PrimaryMainFrameRenderProcessGone(
     if (auto handler = c->GetRequestHandler()) {
       int error_code = web_contents()->GetCrashedErrorCode();
       auto navigation_lock = browser_info_->CreateNavigationLock();
-      handler->OnRenderProcessTerminated(browser(), ts, error_code,
-                                         SadTabView::ErrorToString(error_code));
+      handler->OnRenderProcessTerminated(
+          browser(), ts, error_code,
+          content::CrashExitCodeToString(error_code));
     }
   }
 }

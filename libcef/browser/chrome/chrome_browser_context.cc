@@ -10,13 +10,11 @@
 #include "cef/libcef/browser/prefs/browser_prefs.h"
 #include "cef/libcef/browser/thread_util.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/off_the_record_profile_impl.h"
 #include "chrome/common/pref_names.h"
-#include "components/history/core/browser/history_service.h"
 
 namespace {
 
@@ -141,29 +139,6 @@ void ChromeBrowserContext::Shutdown() {
   }
 }
 
-void ChromeBrowserContext::AddVisitedURLs(
-    const GURL& url,
-    const std::vector<GURL>& redirect_chain,
-    ui::PageTransition transition) {
-  auto* profile = AsProfile();
-  if (profile->IsOffTheRecord()) {
-    // Don't persist state.
-    return;
-  }
-
-  // Called from DidFinishNavigation by Alloy style browsers. Chrome style
-  // browsers will handle this via HistoryTabHelper.
-  if (auto history_service = HistoryServiceFactory::GetForProfile(
-          profile, ServiceAccessType::IMPLICIT_ACCESS)) {
-    history::HistoryAddPageArgs add_page_args;
-    add_page_args.url = url;
-    add_page_args.redirects = redirect_chain;
-    add_page_args.transition = transition;
-    add_page_args.time = base::Time::Now();
-    history_service->AddPage(std::move(add_page_args));
-  }
-}
-
 void ChromeBrowserContext::ProfileCreated(CreateStatus status,
                                           Profile* profile) {
   Profile* parent_profile = nullptr;
@@ -193,8 +168,14 @@ void ChromeBrowserContext::ProfileCreated(CreateStatus status,
     profile_ = profile;
     profile_->AddObserver(this);
     if (!profile_->IsOffTheRecord()) {
+      // The Profile will only be destroyed if the total KeepAlive refcount is
+      // 0 in ProfileManager::UnloadProfileIfNoKeepAlive. This requires a value
+      // like kProfileCreationFlow so that the kWaitingForFirstBrowserWindow
+      // refcount is reset in ProfileManager::AddKeepAlive (via a call to
+      // ClearFirstBrowserWindowKeepAlive). Otherwise, something else needs
+      // to reset that refcount, like creating a Browser.
       profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
-          profile_, ProfileKeepAliveOrigin::kAppWindow);
+          profile_, ProfileKeepAliveOrigin::kProfileCreationFlow);
     }
   }
 

@@ -6,6 +6,7 @@
 
 #include <iostream>
 
+#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -14,6 +15,7 @@
 #include "base/process/process_info.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "cef/include/cef_sandbox_win.h"
 #include "cef/include/cef_version.h"
@@ -32,6 +34,7 @@
 #include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "sandbox/policy/sandbox_type.h"
 #include "sandbox/win/src/sandbox.h"
+#include "third_party/crashpad/crashpad/client/annotation.h"
 
 namespace {
 
@@ -388,4 +391,41 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
 
   // LOG(FATAL) is [[noreturn]], so we never reach this point.
   NOTREACHED();
+}
+
+// Exported by bootstrap.exe and called by the client dll via cef_logging.cc.
+// Keep the implementation synchronized with base/logging.cc.
+extern "C" __declspec(dllexport) void SetLogFatalCrashKey(const char* file,
+                                                          int line,
+                                                          const char* message) {
+  // In case of an out-of-memory condition, this code could be reentered when
+  // constructing and storing the key. Using a static is not thread-safe, but if
+  // multiple threads are in the process of a fatal crash at the same time, this
+  // should work.
+  static bool guarded = false;
+  if (guarded) {
+    return;
+  }
+
+  base::AutoReset<bool> guard(&guarded, true);
+
+  // Only log last path component.
+  if (file) {
+    const char* slash = UNSAFE_TODO(strrchr(file, '\\'));
+    if (slash) {
+      file = UNSAFE_TODO(slash + 1);
+    }
+  }
+
+  auto value = base::StringPrintf("%s:%d: %s", file, line, message);
+  if (value.back() == '\n') {
+    value.pop_back();
+  }
+
+  // Note that we intentionally use LOG_FATAL here (old name for LOGGING_FATAL)
+  // as that's understood and used by the crash backend.
+  // Using the Crashpad API directly here because base::debug::*CrashKeyString()
+  // doesn't appear to work prior to Chromium initialization.
+  static crashpad::StringAnnotation<1024> log_fatal("LOG_FATAL");
+  log_fatal.Set(value);
 }

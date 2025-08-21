@@ -98,11 +98,15 @@ class BrowserDelegate : public content::WebContentsDelegate {
   }
 
   enum class ToolbarButtonType {
-    kCast = 0,
+    kCast_DEPRECATED = 0,
     kDownload_DEPRECATED,
     kSendTabToSelf_DEPRECATED,
-    kSidePanel,
-    kMaxValue = kSidePanel,
+    kSidePanel_DEPRECATED,
+    kMedia,
+    kTabSearch,
+    kBatterySaver,
+    kAvatar,
+    kMaxValue = kAvatar,
   };
 
   // Return true if the toolbar button should be visible.
@@ -158,6 +162,9 @@ class BrowserDelegate : public content::WebContentsDelegate {
 
   // Called at the end of a fullscreen transition.
   virtual void WindowFullscreenStateChanged() {}
+
+  // Returns true if this browser is Views-hosted.
+  virtual bool IsViewsHosted() const { return false; }
 
   // Returns true if this browser has a Views-hosted opener. Only
   // applicable for Browsers of type picture_in_picture and devtools.
