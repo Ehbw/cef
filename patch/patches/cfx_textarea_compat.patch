@@ -1,0 +1,22 @@
+diff --git third_party/blink/renderer/core/dom/element.cc third_party/blink/renderer/core/dom/element.cc
+index 730399551e032..bdba93d97f44f 100644
+--- third_party/blink/renderer/core/dom/element.cc
++++ third_party/blink/renderer/core/dom/element.cc
+@@ -508,6 +508,9 @@ void EnqueueAutofocus(Element& element) {
+   // 5. For each ancestorBC of target's browsing context's ancestor browsing
+   // contexts: if ancestorBC's active document's origin is not same origin with
+   // target's origin, then return.
++
++  // Disable this check with web-security enabled in order to not break compatability with resources expecting this behaviour
++  /*
+   for (Frame* frame = doc.GetFrame(); frame; frame = frame->Parent()) {
+     if (!frame->IsCrossOriginToOutermostMainFrame()) {
+       continue;
+@@ -519,6 +522,7 @@ void EnqueueAutofocus(Element& element) {
+                 "> element in a cross-origin subframe."})));
+     return;
+   }
++  */
+ 
+   // 6. Let topDocument be the active document of target's browsing context's
+   // top-level browsing context.
