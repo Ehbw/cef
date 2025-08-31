@@ -1,0 +1,12 @@
+diff --git services/network/sec_header_helpers.cc services/network/sec_header_helpers.cc
+index 64fb2172fac0d..3652dedaad384 100644
+--- services/network/sec_header_helpers.cc
++++ services/network/sec_header_helpers.cc
+@@ -315,6 +315,7 @@ void SetFetchMetadataHeaders(
+     const mojom::URLLoaderFactoryParams& factory_params,
+     const cors::OriginAccessList& origin_access_list,
+     mojom::CredentialsMode credentials_mode) {
++  return;
+   DCHECK_NE(0u, request.url_chain().size());
+ 
+   // Only append the header to potentially trustworthy URLs.

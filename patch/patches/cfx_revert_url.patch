@@ -1,0 +1,71 @@
+diff --git net/base/schemeful_site.cc net/base/schemeful_site.cc
+index 87556e7e0dc99..75c593e504747 100644
+--- net/base/schemeful_site.cc
++++ net/base/schemeful_site.cc
+@@ -110,11 +110,21 @@ SchemefulSite::ObtainASiteResult SchemefulSite::ObtainASite(
+   if (IsStandardSchemeWithNetworkHost(origin.scheme())) {
+     registerable_domain = GetDomainAndRegistryAsStringPiece(
+         origin, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+-    if (!registerable_domain.empty() &&
+-        registerable_domain.size() == origin.host().size() &&
+-        origin.port() == port) {
+-      return {std::nullopt, /* used_registerable_domain */ true};
+-    }
++
++    // For domains in which the eTLD+1 is not canonical, do not use the eTLD+1.
++    // This is for domains like foo.127.1, which has an eTLD+1 of 127.1, but
++    // https://127.1/ == https://127.0.0.1. This is intended as a temporary
++    // hack not to DCHECK for such origins, until the URL spec is updated to
++    // make such domains invalid in URLs.
++    // TODO(https://crbug.com/1157010): Remove once the fetch spec is updated,
++    // and GURL rejects such domains names.
++    url::CanonHostInfo host_info;
++    bool site_domain_is_safe =
++      registerable_domain.empty() || registerable_domain == origin.host() ||
++      registerable_domain ==
++        CanonicalizeHost(registerable_domain, &host_info);
++    if (!site_domain_is_safe)
++        registerable_domain = {};
+   }
+ 
+   // If origin's host's registrable domain is null, then return (origin's
+diff --git url/url_canon_ip.h url/url_canon_ip.h
+index 7776698858154..b8b29b634b3b3 100644
+--- url/url_canon_ip.h
++++ url/url_canon_ip.h
+@@ -189,7 +189,7 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+     }
+ 
+     if (family != CanonHostInfo::IPV4) {
+-      return CanonHostInfo::BROKEN;
++      return CanonHostInfo::NEUTRAL;
+     }
+ 
+     ++existing_components;
+@@ -201,7 +201,7 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+ 
+     // If there are more than 4 components, fail.
+     if (existing_components == 4) {
+-      return CanonHostInfo::BROKEN;
++      return CanonHostInfo::NEUTRAL;
+     }
+ 
+     current_component_end = current_position - 1;
+@@ -214,7 +214,7 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+   // within an 8-bit field.
+   for (decltype(existing_components) i = existing_components - 1; i > 0; --i) {
+     if (component_values[i] > std::numeric_limits<uint8_t>::max()) {
+-      return CanonHostInfo::BROKEN;
++      return CanonHostInfo::NEUTRAL;
+     }
+     address[existing_components - i - 1] =
+         static_cast<unsigned char>(component_values[i]);
+@@ -228,7 +228,7 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+ 
+   // If the last component has residual bits, report overflow.
+   if (last_value != 0) {
+-    return CanonHostInfo::BROKEN;
++    return CanonHostInfo::NEUTRAL;
+   }
+ 
+   // Tell the caller how many components we saw.

@@ -1,0 +1,225 @@
+diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.cc cef/libcef/browser/alloy/alloy_browser_host_impl.cc
+index b16db08c1..e63f03678 100644
+--- cef/libcef/browser/alloy/alloy_browser_host_impl.cc
++++ cef/libcef/browser/alloy/alloy_browser_host_impl.cc
+@@ -34,6 +34,7 @@
+ #include "cef/libcef/common/values_impl.h"
+ #include "chrome/browser/file_select_helper.h"
+ #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
++#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "components/input/native_web_keyboard_event.h"
+ #include "components/printing/browser/print_composite_client.h"
+@@ -1190,6 +1191,49 @@ void AlloyBrowserHostImpl::ResizeDueToAutoResize(content::WebContents* source,
+   UpdatePreferredSize(source, new_size);
+ }
+ 
++void AlloyBrowserHostImpl::OnRequestPointerLock(
++    content::WebContents* web_contents,
++    bool user_gesture,
++    bool last_unlocked_by_target,
++    bool allowed) {
++  if (allowed) {
++    exclusive_access_context_impl_->get_manager()->pointer_lock_controller()->RequestToLockPointer(
++        web_contents, user_gesture, last_unlocked_by_target);
++  } else {
++    web_contents->GotResponseToPointerLockRequest(
++        blink::mojom::PointerLockResult::kPermissionDenied);
++  }
++}
++
++void AlloyBrowserHostImpl::RequestPointerLock(content::WebContents* web_contents,
++                                     bool user_gesture,
++                                     bool last_unlocked_by_target) {
++  if (IsWindowless()) {
++    web_contents->GotResponseToPointerLockRequest(
++      blink::mojom::PointerLockResult::kPermissionDenied);
++
++    return;
++  }
++  web_contents->GotResponseToPointerLockRequest(
++    blink::mojom::PointerLockResult::kSuccess);
++}
++
++void AlloyBrowserHostImpl::LostPointerLock() {
++  exclusive_access_context_impl_->get_manager()->pointer_lock_controller()->ExitExclusiveAccessToPreviousState();
++}
++
++void AlloyBrowserHostImpl::RequestKeyboardLock(content::WebContents* web_contents,
++                                      bool esc_key_locked) {
++  exclusive_access_context_impl_->get_manager()->keyboard_lock_controller()->RequestKeyboardLock(
++      web_contents, esc_key_locked);
++}
++
++void AlloyBrowserHostImpl::CancelKeyboardLockRequest(
++    content::WebContents* web_contents) {
++  exclusive_access_context_impl_->get_manager()->keyboard_lock_controller()
++      ->CancelKeyboardLockRequest(web_contents);
++}
++
+ void AlloyBrowserHostImpl::RequestMediaAccessPermission(
+     content::WebContents* web_contents,
+     const content::MediaStreamRequest& request,
+@@ -1329,6 +1373,43 @@ void AlloyBrowserHostImpl::WebContentsDestroyed() {
+   }
+ }
+ 
++Profile* CfxExclusiveAccessContextImpl::GetProfile() {
++  return nullptr;
++}
++
++bool CfxExclusiveAccessContextImpl::IsFullscreen() const {
++  return base_->contents_delegate()->is_fullscreen();
++}
++
++void CfxExclusiveAccessContextImpl::EnterFullscreen(const url::Origin& origin,
++                                  ExclusiveAccessBubbleType bubble_type,
++                                  const int64_t display_id) {}
++
++void CfxExclusiveAccessContextImpl::ExitFullscreen() {}
++
++void CfxExclusiveAccessContextImpl::UpdateExclusiveAccessBubble(
++    const ExclusiveAccessBubbleParams& params,
++    ExclusiveAccessBubbleHideCallback first_hide_callback) {}
++
++void CfxExclusiveAccessContextImpl::OnExclusiveAccessUserInput() {}
++
++content::WebContents* CfxExclusiveAccessContextImpl::GetWebContentsForExclusiveAccess() {
++  return base_->contents_delegate()->web_contents();
++}
++
++bool CfxExclusiveAccessContextImpl::CanUserEnterFullscreen() const {
++  return false;
++}
++
++bool CfxExclusiveAccessContextImpl::CanUserExitFullscreen() const {
++  return true;
++}
++
++bool CfxExclusiveAccessContextImpl::IsExclusiveAccessBubbleDisplayed() const {
++  return false;
++}
++
++
+ void AlloyBrowserHostImpl::StartAudioCapturer() {
+   if (!client_.get() || audio_capturer_) {
+     return;
+@@ -1352,6 +1433,11 @@ void AlloyBrowserHostImpl::StartAudioCapturer() {
+       std::make_unique<CefAudioCapturer>(params, this, audio_handler);
+ }
+ 
++CfxExclusiveAccessContextImpl::CfxExclusiveAccessContextImpl(CefBrowserHostBase* base) :
++    base_(base),
++    exclusive_access_manager_(std::make_unique<ExclusiveAccessManager>(this)) {}
++
++
+ // AlloyBrowserHostImpl private methods.
+ // -----------------------------------------------------------------------------
+ 
+@@ -1369,7 +1455,8 @@ AlloyBrowserHostImpl::AlloyBrowserHostImpl(
+                          browser_info,
+                          request_context),
+       content::WebContentsObserver(web_contents),
+-      is_windowless_(platform_delegate_->IsWindowless()) {
++      is_windowless_(platform_delegate_->IsWindowless()),
++      exclusive_access_context_impl_(std::make_unique<CfxExclusiveAccessContextImpl>(this)) {
+   contents_delegate_.ObserveWebContents(web_contents);
+ 
+   if (opener.get()) {
+diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.h cef/libcef/browser/alloy/alloy_browser_host_impl.h
+index c208f08ed..f0bf64e70 100644
+--- cef/libcef/browser/alloy/alloy_browser_host_impl.h
++++ cef/libcef/browser/alloy/alloy_browser_host_impl.h
+@@ -20,6 +20,7 @@
+ #include "cef/libcef/browser/frame_host_impl.h"
+ #include "cef/libcef/browser/menu_manager.h"
+ #include "cef/libcef/browser/request_context_impl.h"
++#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_delegate.h"
+ #include "content/public/browser/web_contents_observer.h"
+@@ -27,6 +28,57 @@
+ class CefAudioCapturer;
+ class CefBrowserInfo;
+ class SiteInstance;
++class ExclusiveAccessManager;
++
++class CfxExclusiveAccessContextImpl : public ExclusiveAccessContext {
++public:
++  CfxExclusiveAccessContextImpl(CefBrowserHostBase* base);
++  // ExclusiveAccessContext methods.
++  // Returns the current profile associated with the window.
++  Profile* GetProfile() override;
++
++  // Returns whether the window hosting the browser view is fullscreen.
++  bool IsFullscreen() const override;
++
++  // Enters fullscreen and updates the exclusive access bubble.
++  void EnterFullscreen(const url::Origin& origin,
++                               ExclusiveAccessBubbleType bubble_type,
++                               const int64_t display_id) override;
++
++  // Exits fullscreen and updates the exclusive access bubble.
++  void ExitFullscreen() override;
++
++  // Updates the exclusive access bubble.
++  void UpdateExclusiveAccessBubble(
++      const ExclusiveAccessBubbleParams& params,
++      ExclusiveAccessBubbleHideCallback first_hide_callback) override;
++
++  // Returns whether the exclusive access bubble is currently shown.
++  bool IsExclusiveAccessBubbleDisplayed() const override;
++
++  // Informs the exclusive access system of some user input, which may update
++  // internal timers and/or re-display the bubble.
++  void OnExclusiveAccessUserInput() override;
++
++  // Returns the currently active WebContents, or nullptr if there is none.
++  content::WebContents* GetWebContentsForExclusiveAccess() override;
++
++  // window.setResizable(false) blocks user-initiated fullscreen requests, see:
++  // https://github.com/explainers-by-googlers/additional-windowing-controls/blocef/main/README.md
++  bool CanUserEnterFullscreen() const override;
++
++  // There are special modes where the user isn't allowed to exit fullscreen on
++  // their own, and this function allows us to check for that.
++  bool CanUserExitFullscreen() const override;
++
++  ExclusiveAccessManager* get_manager() { return exclusive_access_manager_.get(); }
++
++private:
++  CefBrowserHostBase* base_;
++  std::unique_ptr<ExclusiveAccessManager> exclusive_access_manager_;
++};
++
++
+ 
+ // CefBrowser implementation for Alloy style. Method calls are delegated to the
+ // CefPlatformDelegate or the WebContents as appropriate. All methods are
+@@ -259,6 +311,17 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
+                            const gfx::Size& pref_size) override;
+   void ResizeDueToAutoResize(content::WebContents* source,
+                              const gfx::Size& new_size) override;
++  void OnRequestPointerLock(content::WebContents* web_contents,
++                                     bool user_gesture,
++                                     bool last_unlocked_by_target,
++                                     bool allowed);
++  void RequestPointerLock(content::WebContents* web_contents,
++                          bool user_gesture,
++                          bool last_unlocked_by_target) override;
++  void LostPointerLock() override;
++  void RequestKeyboardLock(content::WebContents* web_contents,
++                           bool esc_key_locked) override;
++  void CancelKeyboardLockRequest(content::WebContents* web_contents) override;
+   void RequestMediaAccessPermission(
+       content::WebContents* web_contents,
+       const content::MediaStreamRequest& request,
+@@ -339,6 +402,8 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
+   // starts running when a tab stops being audible, and is canceled if it starts
+   // being audible again before it fires.
+   std::unique_ptr<base::OneShotTimer> recently_audible_timer_;
++
++  std::unique_ptr<CfxExclusiveAccessContextImpl> exclusive_access_context_impl_;
+ };
+ 
+ #endif  // CEF_LIBCEF_BROWSER_ALLOY_ALLOY_BROWSER_HOST_IMPL_H_
