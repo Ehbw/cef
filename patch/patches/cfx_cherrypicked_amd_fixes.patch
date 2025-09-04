@@ -1,0 +1,30 @@
+diff --git media/video/renderable_gpu_memory_buffer_video_frame_pool.cc media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
+index 46c48aa7d08b3..f80841240dff3 100644
+--- media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
++++ media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
+@@ -230,7 +247,7 @@ bool FrameResources::Initialize(VideoPixelFormat format,
+       VideoPixelFormatToSharedImageFormat(format).value();
+ 
+   shared_image_ = context->CreateSharedImage(
+-      coded_size, kBufferUsage, si_format, color_space, usage, sync_token_);
++      coded_size, buffer_usage, si_format, color_space, usage, sync_token_);
+   if (!shared_image_) {
+     DLOG(ERROR) << "Failed to allocate shared image for frame: visible_size="
+                 << visible_size_.ToString()
+@@ -295,6 +312,7 @@ scoped_refptr<VideoFrame> InternalRefCountedPool::MaybeCreateVideoFrame(
+       frame_resources = nullptr;
+       continue;
+     }
++    break;
+   }
+   if (!frame_resources) {
+     frame_resources = std::make_unique<FrameResources>(this, visible_size);
+@@ -332,7 +350,7 @@ void InternalRefCountedPool::OnVideoFrameDestroyed(
+ 
+   // TODO(crbug.com/40174702): Determine if we can get away with just
+   // having 1 available frame, or if that will cause flakey underruns.
+-  constexpr size_t kMaxAvailableFrames = 2;
++  constexpr size_t kMaxAvailableFrames = 10; // TEMP!!!!
+   available_frame_resources_.push_back(std::move(frame_resources));
+   while (available_frame_resources_.size() > kMaxAvailableFrames) {
+     available_frame_resources_.pop_front();
