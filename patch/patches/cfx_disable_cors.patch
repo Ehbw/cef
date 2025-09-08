@@ -1,0 +1,79 @@
+diff --git a/fuchsia_web/webengine/common/cors_exempt_headers.cc b/fuchsia_web/webengine/common/cors_exempt_headers.cc
+index 1fd8fb0e0fc3b..c4d8dc5f4b1e2 100644
+--- a/fuchsia_web/webengine/common/cors_exempt_headers.cc
++++ b/fuchsia_web/webengine/common/cors_exempt_headers.cc
+@@ -29,7 +29,8 @@ void SetCorsExemptHeaders(const std::vector<std::string>& headers) {
+ bool IsHeaderCorsExempt(std::string_view header_name) {
+   DCHECK(g_cors_exempt_headers_lowercase.IsCreated());
+ 
+-  const auto& cors_exempt_headers_set = g_cors_exempt_headers_lowercase.Get();
+-  return base::Contains(cors_exempt_headers_set,
+-                        base::ToLowerASCII(header_name));
++  // CFX: For compatability sakes we can't continue with CORS.
++  // Too many resources expect CORS to still be disabled (as it has been since 2016)
++  // For this sake, mark every single CORS header as exempt.
++  return true;
+ }
+diff --git a/services/network/public/cpp/cors/cors.cc b/services/network/public/cpp/cors/cors.cc
+index 39b2d15abeb57..e2d62a7dd1e74 100644
+--- a/services/network/public/cpp/cors/cors.cc
++++ b/services/network/public/cpp/cors/cors.cc
+@@ -261,12 +261,18 @@ bool ShouldCheckCors(const GURL& request_url,
+ 
+   if (request_initiator->IsSameOriginWith(request_url))
+     return false;
+-  return true;
++
++  // CFX: Disable CORS in order to maintain compatability 
++  // as almost all NUI resources expected CORS to be disabled, and may not function with CORS enabled.
++  // Chromium tests are expected to fail with this.
++  return false;
+ }
+ 
+ bool IsCorsEnabledRequestMode(mojom::RequestMode mode) {
+-  return mode == mojom::RequestMode::kCors ||
+-         mode == mojom::RequestMode::kCorsWithForcedPreflight;
++  // CFX: Disable CORS Request mode in order to maintain compatability
++  // as almost all NUI resources expected CORS to be disabled, and may not function with CORS enabled.
++  // Chromium tests are expected to fail with this.
++  return false;
+ }
+ 
+ bool IsCorsSafelistedMethod(const std::string& method) {
+@@ -275,11 +281,20 @@ bool IsCorsSafelistedMethod(const std::string& method) {
+   std::string method_upper = base::ToUpperASCII(method);
+   return method_upper == net::HttpRequestHeaders::kGetMethod ||
+          method_upper == net::HttpRequestHeaders::kHeadMethod ||
+-         method_upper == net::HttpRequestHeaders::kPostMethod;
++         method_upper == net::HttpRequestHeaders::kPostMethod ||
++         // CFX: Introduce 'DELETE', 'OPTIONS', 'PATCH', 'PUT' methods as 'CORS' compliant in order to maintain compatability.
++         // Chromium testse are expected to fail with this
++         method_upper == net::HttpRequestHeaders::kDeleteMethod ||
++         method_upper == net::HttpRequestHeaders::kOptionsMethod ||
++         method_upper == net::HttpRequestHeaders::kPatchMethod ||
++         method_upper == net::HttpRequestHeaders::kPutMethod;
+ }
+ 
+ bool IsCorsSafelistedContentType(const std::string& media_type) {
+-  return IsCorsSafelistedLowerCaseContentType(base::ToLowerASCII(media_type));
++  // CFX: Accept all content types as CORS safelisted in order to maintain compatability.
++  // as almost all NUI resources expected CORS to be disabled, and may not function with CORS enabled.
++  // Chromium tests are expected to fail with this.
++  return true;
+ }
+ 
+ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
+@@ -382,7 +397,12 @@ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
+ 
+   // Check if the name of the header to send is safe.
+   if (!base::Contains(safe_names, lower_name))
+-    return false;
++  {
++    // CFX: Disable CORS in order to maintain compatability 
++    // as almost all NUI resources expected CORS to be disabled, and may not function with CORS enabled.
++    // Chromium tests are expected to fail with this.
++    return true; 
++  }
+ 
+   // Verify the values of all non-secure headers (except `intervention`).
+   const std::string lower_value = base::ToLowerASCII(value);
