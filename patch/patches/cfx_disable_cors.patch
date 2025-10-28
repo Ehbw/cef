@@ -77,3 +77,19 @@ index 39b2d15abeb57..e2d62a7dd1e74 100644
  
    // Verify the values of all non-secure headers (except `intervention`).
    const std::string lower_value = base::ToLowerASCII(value);
+diff --git a/third_party/blink/renderer/core/frame/dom_window.cc b/third_party/blink/renderer/core/frame/dom_window.cc
+index 073cff564848e..19c8103678588 100644
+--- a/third_party/blink/renderer/core/frame/dom_window.cc
++++ b/third_party/blink/renderer/core/frame/dom_window.cc
+@@ -564,7 +564,10 @@ String DOMWindow::CrossDomainAccessErrorMessage(
+ 
+   // Protocol errors: Use the URL's protocol rather than the origin's protocol
+   // so that we get a useful message for non-heirarchal URLs like 'data:'.
+-  if (target_origin->Protocol() != active_origin->Protocol()) {
++  
++  // CFX: nui:// can be used for resources and in some cases (such as for runcode)
++  // they may need to be accessed from a http/https frame.
++  if ((target_origin->Protocol() != "nui" && (active_origin->Protocol() != "http" && active_origin->Protocol() != "https")) && target_origin->Protocol() != active_origin->Protocol()) {
+     return StrCat({message, " The frame requesting access has a protocol of \"",
+                    active_url.Protocol(),
+                    "\", the frame being accessed has a protocol of \"",
