@@ -1,30 +1,41 @@
-diff --git media/video/renderable_gpu_memory_buffer_video_frame_pool.cc media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
-index 46c48aa7d08b3..f80841240dff3 100644
---- media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
-+++ media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
-@@ -230,7 +247,7 @@ bool FrameResources::Initialize(VideoPixelFormat format,
-       VideoPixelFormatToSharedImageFormat(format).value();
- 
-   shared_image_ = context->CreateSharedImage(
--      coded_size, kBufferUsage, si_format, color_space, usage, sync_token_);
-+      coded_size, buffer_usage, si_format, color_space, usage, sync_token_);
-   if (!shared_image_) {
-     DLOG(ERROR) << "Failed to allocate shared image for frame: visible_size="
-                 << visible_size_.ToString()
-@@ -295,6 +312,7 @@ scoped_refptr<VideoFrame> InternalRefCountedPool::MaybeCreateVideoFrame(
-       frame_resources = nullptr;
-       continue;
-     }
-+    break;
+diff --git a/media/video/renderable_gpu_memory_buffer_video_frame_pool.cc b/media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
+index c1098fbc5e..d478a885d5 100644
+--- a/media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
++++ b/media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
+@@ -305,14 +305,22 @@ scoped_refptr<VideoFrame> InternalRefCountedPool::MaybeCreateVideoFrame(
+     const gfx::ColorSpace& color_space) {
+   // Find or create a suitable FrameResources.
+   std::unique_ptr<FrameResources> frame_resources;
+-  while (!available_frame_resources_.empty()) {
++  std::list<decltype(available_frame_resources_)::iterator> to_remove;
++  for (auto it = available_frame_resources_.begin();
++       it != available_frame_resources_.end(); ++it) {
++    auto& available_resource = *it;
++    if (!available_resource->IsCompatibleWith(visible_size, color_space)) {
++      to_remove.emplace_back(it);
++    }
++  }
++  for (auto it : to_remove) {
++    available_frame_resources_.erase(it);
++  }
++  if (!available_frame_resources_.empty()) {
+     frame_resources = std::move(available_frame_resources_.front());
+     available_frame_resources_.pop_front();
+-    if (!frame_resources->IsCompatibleWith(visible_size, color_space)) {
+-      frame_resources = nullptr;
+-      continue;
+-    }
    }
++
    if (!frame_resources) {
      frame_resources = std::make_unique<FrameResources>(this, visible_size);
-@@ -332,7 +350,7 @@ void InternalRefCountedPool::OnVideoFrameDestroyed(
+     if (!frame_resources->Initialize(format_, color_space)) {
+@@ -349,7 +357,7 @@ void InternalRefCountedPool::OnVideoFrameDestroyed(
  
    // TODO(crbug.com/40174702): Determine if we can get away with just
    // having 1 available frame, or if that will cause flakey underruns.
 -  constexpr size_t kMaxAvailableFrames = 2;
-+  constexpr size_t kMaxAvailableFrames = 10; // TEMP!!!!
++  constexpr size_t kMaxAvailableFrames = 10; // This patch is temporary and will need to be reverted in the future when the underlying issue is resolved.
    available_frame_resources_.push_back(std::move(frame_resources));
    while (available_frame_resources_.size() > kMaxAvailableFrames) {
      available_frame_resources_.pop_front();
