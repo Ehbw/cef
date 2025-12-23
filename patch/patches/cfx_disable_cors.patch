@@ -1,0 +1,96 @@
+diff --git fuchsia_web/webengine/common/cors_exempt_headers.cc fuchsia_web/webengine/common/cors_exempt_headers.cc
+index 1fd8fb0e0fc3b..c4d8dc5f4b1e2 100644
+--- fuchsia_web/webengine/common/cors_exempt_headers.cc
++++ fuchsia_web/webengine/common/cors_exempt_headers.cc
+@@ -29,7 +29,8 @@ void SetCorsExemptHeaders(const std::vector<std::string>& headers) {
+ bool IsHeaderCorsExempt(std::string_view header_name) {
+   DCHECK(g_cors_exempt_headers_lowercase.IsCreated());
+ 
+-  const auto& cors_exempt_headers_set = g_cors_exempt_headers_lowercase.Get();
+-  return base::Contains(cors_exempt_headers_set,
+-                        base::ToLowerASCII(header_name));
++  // CFX: For compatability sakes we can't continue with CORS.
++  // Too many resources expect CORS to still be disabled (as it has been since 2016)
++  // For this sake, mark every single CORS header as exempt.
++  return true;
+ }
+diff --git services/network/public/cpp/cors/cors.cc services/network/public/cpp/cors/cors.cc
+index d433b23fd64ae..2674ce69e4cf4 100644
+--- services/network/public/cpp/cors/cors.cc
++++ services/network/public/cpp/cors/cors.cc
+@@ -255,12 +255,18 @@ bool ShouldCheckCors(const GURL& request_url,
+ 
+   if (request_initiator->IsSameOriginWith(request_url))
+     return false;
+-  return true;
++
++  // CFX: Disable CORS in order to maintain compatability 
++  // as almost all NUI resources expected CORS to be disabled, and may not function with CORS enabled.
++  // Chromium tests are expected to fail with this.
++  return false;
+ }
+ 
+ bool IsCorsEnabledRequestMode(mojom::RequestMode mode) {
+-  return mode == mojom::RequestMode::kCors ||
+-         mode == mojom::RequestMode::kCorsWithForcedPreflight;
++  // CFX: Disable CORS Request mode in order to maintain compatability
++  // as almost all NUI resources expected CORS to be disabled, and may not function with CORS enabled.
++  // Chromium tests are expected to fail with this.
++  return false;
+ }
+ 
+ bool IsCorsSafelistedMethod(const std::string& method) {
+@@ -269,11 +275,20 @@ bool IsCorsSafelistedMethod(const std::string& method) {
+   std::string method_upper = base::ToUpperASCII(method);
+   return method_upper == net::HttpRequestHeaders::kGetMethod ||
+          method_upper == net::HttpRequestHeaders::kHeadMethod ||
+-         method_upper == net::HttpRequestHeaders::kPostMethod;
++         method_upper == net::HttpRequestHeaders::kPostMethod ||
++         // CFX: Introduce 'DELETE', 'OPTIONS', 'PATCH', 'PUT' methods as 'CORS' compliant in order to maintain compatability.
++         // Chromium tests are expected to fail with this
++         method_upper == net::HttpRequestHeaders::kDeleteMethod ||
++         method_upper == net::HttpRequestHeaders::kOptionsMethod ||
++         method_upper == net::HttpRequestHeaders::kPatchMethod ||
++         method_upper == net::HttpRequestHeaders::kPutMethod;
+ }
+ 
+ bool IsCorsSafelistedContentType(const std::string& media_type) {
+-  return IsCorsSafelistedLowerCaseContentType(base::ToLowerASCII(media_type));
++  // CFX: Accept all content types as CORS safelisted in order to maintain compatability.
++  // as almost all NUI resources expected CORS to be disabled, and may not function with CORS enabled.
++  // Chromium tests are expected to fail with this.
++  return true;
+ }
+ 
+ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
+@@ -376,7 +391,12 @@ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
+ 
+   // Check if the name of the header to send is safe.
+   if (!base::Contains(safe_names, lower_name))
+-    return false;
++  {
++    // CFX: Disable CORS in order to maintain compatability 
++    // as almost all NUI resources expected CORS to be disabled, and may not function with CORS enabled.
++    // Chromium tests are expected to fail with this.
++    return true; 
++  }
+ 
+   // Verify the values of all non-secure headers (except `intervention`).
+   const std::string lower_value = base::ToLowerASCII(value);
+diff --git third_party/blink/renderer/core/frame/dom_window.cc third_party/blink/renderer/core/frame/dom_window.cc
+index f8509c4e2b566..c7a401c3bdb9f 100644
+--- third_party/blink/renderer/core/frame/dom_window.cc
++++ third_party/blink/renderer/core/frame/dom_window.cc
+@@ -572,9 +572,9 @@ String DOMWindow::CrossDomainAccessErrorMessage(
+                    "the \"allow-same-origin\" flag."});
+   }
+ 
+-  // Protocol errors: Use the URL's protocol rather than the origin's protocol
+-  // so that we get a useful message for non-heirarchal URLs like 'data:'.
+-  if (target_origin->Protocol() != active_origin->Protocol()) {
++  // CFX: nui:// can be used for resources and in some cases (such as for runcode)
++  // they may need to be accessed from a http/https frame.
++  if ((target_origin->Protocol() != "nui" && (active_origin->Protocol() != "http" && active_origin->Protocol() != "https")) && target_origin->Protocol() != active_origin->Protocol()) {
+     return StrCat({message, " The frame requesting access has a protocol of \"",
+                    active_url.Protocol(),
+                    "\", the frame being accessed has a protocol of \"",
