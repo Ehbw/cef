@@ -1094,6 +1094,22 @@ void CefBrowserHostBase::SendMouseWheelEvent(const CefMouseEvent& event,
   }
 }
 
+// CFX: Introduce native OSR mouse wheel event
+void CefBrowserHostBase::SendMouseWheelEventNative(const void* msg) {
+  if (!CEF_CURRENTLY_ON_UIT()) {
+    CHROME_MSG m = *(CHROME_MSG*)msg;
+    CEF_POST_TASK(CEF_UIT, base::BindOnce([](scoped_refptr<CefBrowserHostBase> self, const CHROME_MSG& m) {
+        self->SendMouseWheelEventNative(&m);
+    }, scoped_refptr(this), m));
+    return;
+  }
+
+  if (platform_delegate_) {
+    platform_delegate_->SendMouseWheelEventNative(msg);
+  }
+}
+//
+
 bool CefBrowserHostBase::IsValid() {
   return browser_info_->IsValid();
 }

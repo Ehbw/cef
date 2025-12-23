@@ -85,6 +85,93 @@ void CefVideoConsumerOSR::RequestRefreshFrame(
   video_capturer_->RequestRefreshFrame();
 }
 
+void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
+  if (type < PET_VIEW || type > PET_POPUP) {
+    return nullptr;
+  }
+  CHECK(CEF_CURRENTLY_ON_UIT());
+
+  auto& slot = slots_[type];
+  // No new frames yet.
+  if (slot.pending.is_null() || !slot.pending_callback) {
+    return nullptr;
+  }
+
+  // Too many frames have built up. Don't let any more be pushed
+  if (slot.inflight.size() >= FrameSlot::kMaxInflightFrames) {
+    slot.had_backlog = true;
+    return nullptr;
+  }
+
+  uint32_t seq = ++slot.sequence;
+  FrameSlot::InflightFrame& frame = slot.inflight[seq];
+  frame.handle = std::move(slot.pending);
+  frame.callbacks = std::move(slot.pending_callback);
+  frame.width = slot.current_frame_width;
+  frame.height = slot.current_frame_height;
+  slot.pending = gfx::GpuMemoryBufferHandle();
+  slot.current_seq = seq;
+    
+  cef_lock_frame_info_t* info = slot.GetFrameInfo(seq);
+  info->size = sizeof(cef_lock_frame_info_t);
+
+  info->dirty_rect_count = slot.dirty_rects_count;
+  memcpy(info->dirty_rects, slot.dirty_rects,
+         sizeof(cef_rect_t) * slot.dirty_rects_count);
+  slot.ClearRects();
+  info->shared_handle = frame.handle.dxgi_handle().buffer_handle();
+  info->paint_type = type;
+  info->frame_seq = seq;
+  info->width = frame.width;
+  info->height = frame.height;
+
+  const auto& token = frame.handle.dxgi_handle().token().value();
+  info->token_high = token.GetHighForSerialization();
+  info->token_low = token.GetLowForSerialization();
+
+  return info;
+}
+
+void CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
+    if (type < PET_VIEW || type > PET_POPUP) {
+        return;
+    }
+    CHECK(CEF_CURRENTLY_ON_UIT());
+
+    FrameSlot::InflightFrame released;
+    bool needs_refresh = false;
+
+    FrameSlot& slot = slots_[type];
+
+    auto it = slot.inflight.find(sequence_id);
+    if (it == slot.inflight.end()) {
+        LOG(ERROR) << "Frame " << sequence_id << " was already released";
+        // Already released.
+        return;
+    }
+
+    released = std::move(it->second);
+    slot.inflight.erase(it);
+
+    CHECK(released.callbacks);
+    released.callbacks->Done();
+
+    // Clear backlog flag and force UI refresh if the queue has been mostly cleared
+    if (slot.had_backlog && slot.inflight.size() < 2) {
+      slot.had_backlog = false;
+      needs_refresh = true;
+    }
+
+
+    // Force refresh if we dropped any frames.
+    // This could occur in the case where there is a burst of frame updates
+    // followed by no new frame updates after the backlog of frames has been rendered
+    // Leading to potentially stale UI data being rendered.
+    if (needs_refresh) {
+      RequestRefreshFrame(std::nullopt);
+    }
+}
+
 // Frame size values are as follows:
 //   info->coded_size = Width and height of the video frame. Not all pixels in
 //   this region are valid.
@@ -99,7 +186,9 @@ void CefVideoConsumerOSR::OnFrameCaptured(
     const gfx::Rect& content_rect,
     mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
         callbacks) {
-  ScopedVideoFrameDone scoped_done(std::move(callbacks));
+  // CFX: Don't use RAII handler to release callback
+  // We want to control this entirely ourselves.
+  //ScopedVideoFrameDone scoped_done(std::move(callbacks));
 
   media::VideoFrameMetadata metadata = info->metadata;
   gfx::Rect damage_rect;
@@ -130,7 +219,7 @@ void CefVideoConsumerOSR::OnFrameCaptured(
     CHECK(data->is_gpu_memory_buffer_handle() &&
           (info->pixel_format == media::PIXEL_FORMAT_ARGB ||
            info->pixel_format == media::PIXEL_FORMAT_ABGR));
-
+ #if 0
     // The info->pixel_format will tell if the texture is RGBA or BGRA
     // On Linux, X11 lacks support for RGBA_8888 so it might be BGRA.
     // On Windows and macOS, it should always be RGBA.
@@ -172,15 +261,92 @@ void CefVideoConsumerOSR::OnFrameCaptured(
       auto size = info->metadata.source_size.value();
       extra.source_size = {size.width(), size.height()};
     }
-
+#endif
 #if BUILDFLAG(IS_WIN)
-    auto& gmb_handle = data->get_gpu_memory_buffer_handle();
-    cef_accelerated_paint_info_t paint_info = {
-        sizeof(cef_accelerated_paint_info_t)};
-    paint_info.extra = extra;
-    paint_info.shared_texture_handle = gmb_handle.dxgi_handle().buffer_handle();
-    paint_info.format = pixel_format;
-    view_->OnAcceleratedPaint(damage_rect, info->coded_size, paint_info);
+    // CFX: Introduce LockFrame Mechanism.
+    {
+      auto gmb_handle = std::move(data->get_gpu_memory_buffer_handle());
+
+      auto updateFrameInfo = [&gmb_handle, &damage_rect, &info, &callbacks](
+                                 CefVideoConsumerOSR* consumer,
+                                 cef_paint_element_type_t type) {
+        auto& slot = consumer->slots_[type];
+
+        if (slot.pending_callback)
+        {
+          slot.pending_callback->Done();
+          slot.pending_callback.reset();
+        }
+
+        slot.pending = std::move(gmb_handle);
+        slot.current_frame_width = info->coded_size.width();
+        slot.current_frame_height = info->coded_size.height();
+        slot.pending_callback.Bind(std::move(callbacks));
+
+        gfx::Rect rect_in_pixels(0, 0, info->coded_size.width(),
+                                 info->coded_size.height());
+        rect_in_pixels.Intersect(damage_rect);
+
+        if (damage_rect.x() == 0 && damage_rect.y() == 0 &&
+            damage_rect.width() == info->coded_size.width() &&
+            damage_rect.height() == info->coded_size.height()) {
+          slot.ClearRects();
+        } else {
+          slot.PushRect(rect_in_pixels);
+        }
+      };
+
+      if (view_->IsPopupWidget()) {
+        CefRenderWidgetHostViewOSR* parent = view_->GetParentHostView();
+        if (parent) {
+          CefVideoConsumerOSR* consumer = parent->GetVideoConsumer();
+          if (consumer) {
+            std::scoped_lock _(consumer->frame_mutex_);
+            updateFrameInfo(consumer, PET_POPUP);
+          }
+        }
+      } else {
+        std::scoped_lock _(frame_mutex_);
+        updateFrameInfo(this, PET_VIEW);
+      }
+    }
+
+    // CFX: Introduce OnFrameCaptured callback.
+    // Allows us to have a callback when the frame is prepared.
+    // Allowing us to lift the blocking of OpenSharedResource1/OpenShareHandle off of the Games Render thread (even if it can be insignificant at times).
+    view_->OnFrameCaptured(info->coded_size);
+
+    mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> to_release;
+
+    // If we don't use the frame discard it quickly before we allow it to pile up.
+    if (view_->IsPopupWidget()) {
+      CefRenderWidgetHostViewOSR* parent = view_->GetParentHostView();
+      if (parent) {
+        CefVideoConsumerOSR* consumer = parent->GetVideoConsumer();
+        if (consumer) {
+          std::scoped_lock _(consumer->frame_mutex_);
+          auto& slot = consumer->slots_[PET_POPUP];
+          if (slot.pending_callback) {
+            to_release = std::move(slot.pending_callback);
+            slot.pending = gfx::GpuMemoryBufferHandle();
+            slot.pending_callback.reset();
+          }
+        }
+      }
+    } else {
+      std::scoped_lock _(frame_mutex_);
+      auto& slot = slots_[PET_VIEW];
+      if (slot.pending_callback) {
+        to_release = std::move(slot.pending_callback);
+        slot.pending = gfx::GpuMemoryBufferHandle();
+        slot.pending_callback.reset();
+      }
+    }
+
+    if (to_release) {
+      to_release->Done();
+    }
+
 #elif BUILDFLAG(IS_APPLE)
     auto& gmb_handle = data->get_gpu_memory_buffer_handle();
     cef_accelerated_paint_info_t paint_info = {

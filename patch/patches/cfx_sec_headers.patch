@@ -1,0 +1,13 @@
+diff --git services/network/sec_header_helpers.cc services/network/sec_header_helpers.cc
+index 64fb2172fac0d..08e43d3163adb 100644
+--- services/network/sec_header_helpers.cc
++++ services/network/sec_header_helpers.cc
+@@ -315,6 +315,8 @@ void SetFetchMetadataHeaders(
+     const mojom::URLLoaderFactoryParams& factory_params,
+     const cors::OriginAccessList& origin_access_list,
+     mojom::CredentialsMode credentials_mode) {
++  // CFX: no-op SetFetchMetadataHeaders for Arkose FunCaptcha compatibility
++  return;
+   DCHECK_NE(0u, request.url_chain().size());
+ 
+   // Only append the header to potentially trustworthy URLs.

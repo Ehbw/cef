@@ -42,6 +42,9 @@ class CefBrowserPlatformDelegateOsr
   void SendMouseWheelEvent(const CefMouseEvent& event,
                            int deltaX,
                            int deltaY) override;
+// CFX: Introduce native OSR mouse wheel event
+  void SendMouseWheelEventNative(const void* msg) override;
+//
   void SendTouchEvent(const CefTouchEvent& event) override;
   void SetFocus(bool setFocus) override;
   gfx::Point GetScreenPoint(const gfx::Point& view,
@@ -55,6 +58,13 @@ class CefBrowserPlatformDelegateOsr
   std::unique_ptr<CefMenuRunner> CreateMenuRunner() override;
   bool IsWindowless() const override;
   void WasHidden(bool hidden) override;
+
+  // CFX: OSR patches
+  virtual void* LockFrame(cef_paint_element_type_t type);
+
+  virtual void ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
+  //
+
   bool IsHidden() const override;
   void NotifyScreenInfoChanged() override;
   void Invalidate(cef_paint_element_type_t type) override;

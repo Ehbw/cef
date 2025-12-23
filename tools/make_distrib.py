@@ -412,7 +412,7 @@ def transfer_tools_files(script_dir, build_dirs, output_dir):
         if len(file_name) == 0:
           raise Exception('Failed to parse %s command component: %s' % (mksnapshot_name, cmd))
         if cmd.startswith('../../'):
-          file_path = os.path.realpath(os.path.join(build_dir, cmd))
+          file_path = os.path.abspath(os.path.join(build_dir, cmd))
           # Validate input file/path.
           if not file_path.startswith(src_dir):
             raise Exception('Invalid %s command input file: %s' % (mksnapshot_name, file_path))

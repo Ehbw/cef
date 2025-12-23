@@ -321,6 +321,10 @@ void CefBrowserPlatformDelegate::SendTouchEvent(const CefTouchEvent& event) {
   NOTIMPLEMENTED();
 }
 
+void CefBrowserPlatformDelegate::SendMouseWheelEventNative(const void* msg) {
+  NOTIMPLEMENTED();
+}
+
 void CefBrowserPlatformDelegate::SetFocus(bool setFocus) {}
 
 void CefBrowserPlatformDelegate::SendCaptureLostEvent() {

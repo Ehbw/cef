@@ -172,6 +172,18 @@ class CefRenderHandler : public virtual CefBaseRefCounted {
                                   const RectList& dirtyRects,
                                   const CefAcceleratedPaintInfo& info) {}
 
+#if CEF_API_ADDED(CEF_NEXT)  
+  ///
+  /// Called when an element has been rendered to the shared texture handle.
+  /// |type| indicates whether the element is the view or the popup widget.
+  /// To be used with LockFrame and ReleaseFrame in order to grab the frame information 
+  /// And then later release it when done.
+  ///
+  /*--cef(added=next)--*/
+  virtual void OnFrameCaptured(CefRefPtr<CefBrowser> browser,
+                               PaintElementType type) {}
+#endif
+
   ///
   /// Called to retrieve the size of the touch handle for the specified
   /// |orientation|.

@@ -1,0 +1,26 @@
+diff --git third_party/blink/renderer/core/fileapi/file.h third_party/blink/renderer/core/fileapi/file.h
+index 20465cba0998c..bfd5c728a46e5 100644
+--- third_party/blink/renderer/core/fileapi/file.h
++++ third_party/blink/renderer/core/fileapi/file.h
+@@ -222,6 +222,9 @@ class CORE_EXPORT File final : public Blob {
+   }
+   const String& name() const { return name_; }
+ 
++  // Getter for the path IDL attribute.
++  const String& path() const { return GetPath(); }
++
+   // Getter for the lastModified IDL attribute,
+   // http://dev.w3.org/2006/webapi/FileAPI/#file-attrs
+   // This method calls CaptureSnapshotIfNeeded, and thus can involve synchronous
+diff --git third_party/blink/renderer/core/fileapi/file.idl third_party/blink/renderer/core/fileapi/file.idl
+index 47b1dce8075d5..e1c33067496ce 100644
+--- third_party/blink/renderer/core/fileapi/file.idl
++++ third_party/blink/renderer/core/fileapi/file.idl
+@@ -31,6 +31,7 @@
+ ] interface File : Blob {
+     [CallWith=ExecutionContext] constructor(sequence<BlobPart> fileBits, USVString fileName, optional FilePropertyBag options = {});
+     readonly attribute DOMString name;
++    readonly attribute DOMString path;
+     readonly attribute long long lastModified;
+ 
+     // Non-standard APIs

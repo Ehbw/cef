@@ -2,13 +2,86 @@
 #define LIBCEF_BROWSER_OSR_VIDEO_CONSUMER_OSR_H_
 
 #include <optional>
+#include <mutex>
+#include <unordered_map>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "components/viz/host/client_frame_sink_video_capturer.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
+#include "cef/include/internal/cef_types.h"
+#include "cef/include/internal/cef_types_win.h"
 
 class CefRenderWidgetHostViewOSR;
+
+
+// CFX: LockFrame implementation
+struct FrameSlot {
+  // Keep in sync with cef_lock_frame_info_t::dirty_rects in cef_types.h
+  static constexpr int kMaxDirtyRects = 10;
+  // Chromium has a max of 11 inflight frames, we leave two spare so chromium
+  // doesn't freak out if we have used all frames.
+  static constexpr int kMaxInflightFrames = 6;
+
+  struct InflightFrame
+  {
+    gfx::GpuMemoryBufferHandle handle;
+    mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> callbacks;
+    cef_lock_frame_info_t info{};
+    int width = 0;
+    int height = 0;
+  };
+
+  // Future Frame
+  gfx::GpuMemoryBufferHandle pending;
+  mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> pending_callback;
+
+  std::unordered_map<uint32_t, InflightFrame> inflight;
+
+  uint32_t current_seq = 0;
+  uint32_t sequence = 0;
+
+  // Frame coded size information for the frame being processed
+  uint32_t current_frame_height;
+  uint32_t current_frame_width;
+
+  bool had_backlog;
+
+  int dirty_rects_count = 0;
+  cef_rect_t dirty_rects[kMaxDirtyRects];
+
+  ~FrameSlot() { 
+      for (auto& [seq, frame] : inflight) {
+          if (frame.callbacks) {
+              frame.callbacks->Done();
+          }
+      }
+      if (pending_callback) {
+        pending_callback->Done();
+      }
+      // GpuMemoryBufferHandle dtor releases the DXGI handles.
+  }
+
+  cef_lock_frame_info_t* GetFrameInfo(uint32_t seq) {
+    if (auto it = inflight.find(seq); it != inflight.end()) {
+      InflightFrame& frame = it->second;
+      return &frame.info;
+    }
+    return nullptr;
+  }
+
+  void PushRect(const gfx::Rect& rect) {
+    if (dirty_rects_count < kMaxDirtyRects) {
+      dirty_rects[dirty_rects_count++] = {rect.x(), rect.y(), rect.width(), rect.height()};
+    }
+  }
+
+  void ClearRects() {
+    dirty_rects_count = 0;
+    memset(&dirty_rects, 0, sizeof(cef_rect_t) * kMaxDirtyRects);
+  }
+};
+//
 
 class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
  public:
@@ -24,6 +97,11 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
   void SetFrameRate(base::TimeDelta frame_rate);
   void SizeChanged(const gfx::Size& size_in_pixels);
   void RequestRefreshFrame(const std::optional<gfx::Rect>& bounds_in_pixels);
+ 
+  // CFX: Lockframe patch
+  void* LockFrame(cef_paint_element_type_t type);
+  void ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
+  //
 
  private:
   // viz::mojom::FrameSinkVideoConsumer implementation.
@@ -46,6 +124,9 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
 
   gfx::Size size_in_pixels_;
   std::optional<gfx::Rect> bounds_in_pixels_;
+
+  std::mutex frame_mutex_;
+  FrameSlot slots_[2];
 };
 
 #endif  // LIBCEF_BROWSER_OSR_VIDEO_CONSUMER_OSR_H_

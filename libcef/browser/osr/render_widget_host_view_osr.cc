@@ -533,12 +533,12 @@ void CefRenderWidgetHostViewOSR::OverrideDisplayFeatureForEmulation(
 
 blink::mojom::PointerLockResult CefRenderWidgetHostViewOSR::LockPointer(
     bool request_unadjusted_movement) {
-  return blink::mojom::PointerLockResult::kPermissionDenied;
+  return blink::mojom::PointerLockResult::kUnsupportedOptions;
 }
 
 blink::mojom::PointerLockResult CefRenderWidgetHostViewOSR::ChangePointerLock(
     bool request_unadjusted_movement) {
-  return blink::mojom::PointerLockResult::kPermissionDenied;
+  return blink::mojom::PointerLockResult::kUnsupportedOptions;
 }
 
 void CefRenderWidgetHostViewOSR::UnlockPointer() {}
@@ -1053,6 +1053,7 @@ void CefRenderWidgetHostViewOSR::OnFrameComplete(
   DCHECK_EQ(begin_frame_source_.source_id(), ack.frame_id.source_id);
   DCHECK_EQ(begin_frame_number_, ack.frame_id.sequence_number);
   begin_frame_pending_ = false;
+  had_frame_ = true;
 }
 
 void CefRenderWidgetHostViewOSR::OnRenderFrameMetadataChangedAfterActivation(
@@ -1095,6 +1096,9 @@ void CefRenderWidgetHostViewOSR::OnRenderFrameMetadataChangedAfterActivation(
 
 std::unique_ptr<viz::HostDisplayClient>
 CefRenderWidgetHostViewOSR::CreateHostDisplayClient() {
+  if (had_frame_) {
+     begin_frame_pending_ = false;
+  }
   host_display_client_ =
       new CefHostDisplayClientOSR(this, gfx::kNullAcceleratedWidget);
   host_display_client_->SetActive(true);
@@ -1663,6 +1667,53 @@ void CefRenderWidgetHostViewOSR::OnPaint(const gfx::Rect& damage_rect,
 
   handler->OnPaint(browser_impl_.get(), IsPopupWidget() ? PET_POPUP : PET_VIEW,
                    rcList, pixels, pixel_size.width(), pixel_size.height());
+
+  // Release the resize hold when we reach the desired size.
+  if (hold_resize_) {
+    DCHECK_GT(cached_scale_factor_, 0);
+    gfx::Size expected_size =
+        gfx::ScaleToCeiledSize(GetViewBounds().size(), cached_scale_factor_);
+    if (pixel_size == expected_size) {
+      ReleaseResizeHold();
+    }
+  }
+}
+
+void* CefRenderWidgetHostViewOSR::LockFrame(cef_paint_element_type_t type) {
+  if (video_consumer_) {
+    return video_consumer_->LockFrame(type);
+  }
+  return nullptr;
+}
+
+void CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
+  if (video_consumer_) {
+    if (!CEF_CURRENTLY_ON_UIT()) {
+      CEF_POST_TASK(
+          CEF_UIT,
+          base::BindOnce(&CefRenderWidgetHostViewOSR::ReleaseFrame,
+                         weak_ptr_factory_.GetWeakPtr(), type, sequence_id));
+      return;
+    }
+
+    return video_consumer_->ReleaseFrame(type, sequence_id);
+  }
+}
+
+void CefRenderWidgetHostViewOSR::OnFrameCaptured(const gfx::Size& pixel_size) {
+  TRACE_EVENT0("cef", "CefRenderWidgetHostViewOSR::OnFrameCaptured");
+
+  // Workaround for https://github.com/chromiumembedded/cef/issues/2817
+  if (!is_showing_) {
+    return;
+  }
+
+  CefRefPtr<CefRenderHandler> handler =
+      browser_impl_->client()->GetRenderHandler();
+  DCHECK(handler);
+
+  handler->OnFrameCaptured(browser_impl_.get(),
+                              IsPopupWidget() ? PET_POPUP : PET_VIEW);
 
   // Release the resize hold when we reach the desired size.
   if (hold_resize_) {

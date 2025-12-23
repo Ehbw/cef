@@ -52,6 +52,10 @@
 class CefBrowserHost;
 class CefClient;
 
+// CFX: Provide macros to help NUI tell whats available and what isn't (for updating CEF)
+#define CEF_OSR_NATIVE_MOUSE_EVENT 1
+#define CEF_OSR_LOCK_FRAME 1
+
 ///
 /// Class used to represent a browser. When used in the browser process the
 /// methods of this class may be called on any thread unless otherwise indicated
@@ -786,6 +790,18 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
   ///
   /*--cef()--*/
   virtual void SendTouchEvent(const CefTouchEvent& event) = 0;
+  
+#if CEF_API_ADDED(CEF_NEXT) && defined(OS_WIN)
+  ///
+  /// Send a mouse wheel event to the browser. The x and y coordinates are
+  /// relative to the upper-left corner of the view. The deltaX and deltaY
+  /// values represent the movement delta in the X and Y directions respectively.
+  /// In order to scroll inside select popups with window rendering disabled
+  /// CefRenderHandler::GetScreenPoint should be implemented properly.
+  ///
+  /*--cef(added=next)--*/
+  virtual void SendMouseWheelEventNative(const void* msg) = 0;
+#endif
 
   ///
   /// Send a capture lost event to the browser.
@@ -1065,6 +1081,21 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
   ///
   /*--cef()--*/
   virtual bool IsRenderProcessUnresponsive() = 0;
+
+#if CEF_API_ADDED(CEF_NEXT)  
+  ///
+  /// Returns information about the current frame popup texture.
+  /// Use cef_lock_frame_info_t.
+  /// 
+  /*--cef(added=next)--*/
+  virtual void* LockFrame(cef_paint_element_type_t type) = 0;
+
+  ///
+  /// Releases the frame and its content tied to the sequence
+  ///
+  /*--cef(added=next)--*/
+  virtual void ReleaseFrame(cef_paint_element_type_t type, int sequence_id) = 0;
+#endif
 
   ///
   /// Returns the runtime style for this browser (ALLOY or CHROME). See
