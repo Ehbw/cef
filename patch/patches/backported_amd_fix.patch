@@ -1,0 +1,35 @@
+diff --git AUTHORS AUTHORS
+index e1772042..5063fba 100644
+--- AUTHORS
++++ AUTHORS
+@@ -1808,6 +1808,7 @@
+ Mail.ru Group <*@corp.mail.ru>
+ Make Positive Provar Limited <*@provartesting.com>
+ Mediatek <*@mediatek.com>
++Meld Studio, Inc. <*@meldstudio.co>
+ Menlo Security, Inc. <*@menlosecurity.com>
+ Meta Platforms, Inc. <*@fb.com>
+ Meta Platforms, Inc. <*@meta.com>
+diff --git gpu/command_buffer/service/dxgi_shared_handle_manager.cc gpu/command_buffer/service/dxgi_shared_handle_manager.cc
+index 0477c26..af8cba34 100644
+--- gpu/command_buffer/service/dxgi_shared_handle_manager.cc
++++ gpu/command_buffer/service/dxgi_shared_handle_manager.cc
+@@ -86,6 +86,19 @@
+ }
+ 
+ DXGISharedHandleState::~DXGISharedHandleState() {
++  {
++    // Flush each device context to ensure drivers process deferred destruction
++    // of shared textures promptly (fixes VRAM leak observed on AMD hardware
++    // when shared handles are closed without a flush).
++    base::AutoLock auto_lock(lock_);
++    for (auto& entry : d3d11_texture_state_map_) {
++      Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
++      entry.first->GetImmediateContext(&context);
++      if (context) {
++        context->Flush();
++      }
++    }
++  }
+   CHECK(!keyed_mutex_acquired_);
+ }
