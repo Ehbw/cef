@@ -1,8 +1,8 @@
 diff --git net/base/schemeful_site.cc net/base/schemeful_site.cc
-index 87556e7e0dc99..75c593e504747 100644
+index 87556e7e0dc99..5a53a568148c2 100644
 --- net/base/schemeful_site.cc
 +++ net/base/schemeful_site.cc
-@@ -110,11 +110,21 @@ SchemefulSite::ObtainASiteResult SchemefulSite::ObtainASite(
+@@ -110,11 +110,27 @@ SchemefulSite::ObtainASiteResult SchemefulSite::ObtainASite(
    if (IsStandardSchemeWithNetworkHost(origin.scheme())) {
      registerable_domain = GetDomainAndRegistryAsStringPiece(
          origin, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
@@ -11,6 +11,12 @@ index 87556e7e0dc99..75c593e504747 100644
 -        origin.port() == port) {
 -      return {std::nullopt, /* used_registerable_domain */ true};
 -    }
++
++    //CFX: Revert https://github.com/chromium/chromium/commit/6998eb4d40fb77f77363f34f1bc1a4ffd00e893e
++    //This change broke compatability with NUI resources with name schemes such as "https://cfx-nui-dr-scratching-3.1.0/"
++    //From the original commit:
++    //"Since we don't rely on URL display to end users as much as browsers do,
++    // the security risks leading to this change do not apply here. "
 +
 +    // For domains in which the eTLD+1 is not canonical, do not use the eTLD+1.
 +    // This is for domains like foo.127.1, which has an eTLD+1 of 127.1, but
@@ -30,42 +36,54 @@ index 87556e7e0dc99..75c593e504747 100644
  
    // If origin's host's registrable domain is null, then return (origin's
 diff --git url/url_canon_ip.h url/url_canon_ip.h
-index 7776698858154..b8b29b634b3b3 100644
+index 55f39ab771dff..08bb4af8d654d 100644
 --- url/url_canon_ip.h
 +++ url/url_canon_ip.h
-@@ -189,7 +189,7 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+@@ -187,6 +187,12 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
      }
  
      if (family != CanonHostInfo::IPV4) {
 -      return CanonHostInfo::BROKEN;
++      // CFX: Partically Revert https://github.com/chromium/chromium/commit/f21b724918b277919a898464926568d79d595016
++      // Changing return from CanonHostInfo::BROKEN -> CanonHostInfo::NEUTRAL
++      // From the original commit reverting this:
++      // "This both reverts the behavior from f21b724,
++      // as well as 6998eb4 which is required to
++      // not fail mojo deserialization on IP-style hosts." 
 +      return CanonHostInfo::NEUTRAL;
      }
- 
+
      ++existing_components;
-@@ -201,7 +201,7 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+@@ -199,7 +205,9 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
  
      // If there are more than 4 components, fail.
      if (existing_components == 4) {
 -      return CanonHostInfo::BROKEN;
-+      return CanonHostInfo::NEUTRAL;
++      // CFX: Partically Revert https://github.com/chromium/chromium/commit/f21b724918b277919a898464926568d79d595016
++      // See above for reasoning.
++      return CanonHostInfo::NETURAL;
      }
  
      current_component_end = current_position - 1;
-@@ -214,7 +214,7 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+@@ -213,7 +221,9 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
    // within an 8-bit field.
-   for (decltype(existing_components) i = existing_components - 1; i > 0; --i) {
+   for (uint8_t i = existing_components - 1; i > 0; --i) {
      if (component_values[i] > std::numeric_limits<uint8_t>::max()) {
 -      return CanonHostInfo::BROKEN;
-+      return CanonHostInfo::NEUTRAL;
++      // CFX: Partically Revert https://github.com/chromium/chromium/commit/f21b724918b277919a898464926568d79d595016
++      // See above for reasoning.
++      return CanonHostInfo::NETURAL;
      }
      address[existing_components - i - 1] =
-         static_cast<unsigned char>(component_values[i]);
-@@ -228,7 +228,7 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+         static_cast<uint8_t>(component_values[i]);
+@@ -227,7 +237,9 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
  
    // If the last component has residual bits, report overflow.
    if (last_value != 0) {
 -    return CanonHostInfo::BROKEN;
-+    return CanonHostInfo::NEUTRAL;
++    // CFX: Partically Revert https://github.com/chromium/chromium/commit/f21b724918b277919a898464926568d79d595016
++    // See above for reasoning.
++    return CanonHostInfo::NETURAL;
    }
  
    // Tell the caller how many components we saw.
