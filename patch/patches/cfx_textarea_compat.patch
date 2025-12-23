@@ -1,0 +1,26 @@
+diff --git third_party/blink/renderer/core/dom/element.cc third_party/blink/renderer/core/dom/element.cc
+index 5ec94dee53c53..a5b0b69c4040f 100644
+--- third_party/blink/renderer/core/dom/element.cc
++++ third_party/blink/renderer/core/dom/element.cc
+@@ -542,21 +542,6 @@ void EnqueueAutofocus(Element& element) {
+     return;
+   }
+ 
+-  // 5. For each ancestorBC of target's browsing context's ancestor browsing
+-  // contexts: if ancestorBC's active document's origin is not same origin with
+-  // target's origin, then return.
+-  for (Frame* frame = doc.GetFrame(); frame; frame = frame->Parent()) {
+-    if (!frame->IsCrossOriginToOutermostMainFrame()) {
+-      continue;
+-    }
+-    window->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+-        mojom::ConsoleMessageSource::kSecurity,
+-        mojom::ConsoleMessageLevel::kError,
+-        StrCat({"Blocked autofocusing on a <", element.TagQName().ToString(),
+-                "> element in a cross-origin subframe."})));
+-    return;
+-  }
+-
+   // 6. Let topDocument be the active document of target's browsing context's
+   // top-level browsing context.
+   Document& top_document = element.GetDocument().TopDocument();
