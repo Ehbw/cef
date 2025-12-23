@@ -36,10 +36,10 @@ index 87556e7e0dc99..5a53a568148c2 100644
  
    // If origin's host's registrable domain is null, then return (origin's
 diff --git url/url_canon_ip.h url/url_canon_ip.h
-index 55f39ab771dff..08bb4af8d654d 100644
+index 55f39ab771dff..02e9972f457ce 100644
 --- url/url_canon_ip.h
 +++ url/url_canon_ip.h
-@@ -187,6 +187,12 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
+@@ -187,7 +187,13 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
      }
  
      if (family != CanonHostInfo::IPV4) {
@@ -52,7 +52,7 @@ index 55f39ab771dff..08bb4af8d654d 100644
 +      // not fail mojo deserialization on IP-style hosts." 
 +      return CanonHostInfo::NEUTRAL;
      }
-
+ 
      ++existing_components;
 @@ -199,7 +205,9 @@ constexpr CanonHostInfo::Family DoIPv4AddressToNumber(
  
@@ -61,7 +61,7 @@ index 55f39ab771dff..08bb4af8d654d 100644
 -      return CanonHostInfo::BROKEN;
 +      // CFX: Partically Revert https://github.com/chromium/chromium/commit/f21b724918b277919a898464926568d79d595016
 +      // See above for reasoning.
-+      return CanonHostInfo::NETURAL;
++      return CanonHostInfo::NEUTRAL;
      }
  
      current_component_end = current_position - 1;
@@ -72,7 +72,7 @@ index 55f39ab771dff..08bb4af8d654d 100644
 -      return CanonHostInfo::BROKEN;
 +      // CFX: Partically Revert https://github.com/chromium/chromium/commit/f21b724918b277919a898464926568d79d595016
 +      // See above for reasoning.
-+      return CanonHostInfo::NETURAL;
++      return CanonHostInfo::NEUTRAL;
      }
      address[existing_components - i - 1] =
          static_cast<uint8_t>(component_values[i]);
@@ -83,7 +83,7 @@ index 55f39ab771dff..08bb4af8d654d 100644
 -    return CanonHostInfo::BROKEN;
 +    // CFX: Partically Revert https://github.com/chromium/chromium/commit/f21b724918b277919a898464926568d79d595016
 +    // See above for reasoning.
-+    return CanonHostInfo::NETURAL;
++    return CanonHostInfo::NEUTRAL;
    }
  
    // Tell the caller how many components we saw.
