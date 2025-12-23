@@ -1,7 +1,7 @@
-diff --git a/fuchsia_web/webengine/common/cors_exempt_headers.cc b/fuchsia_web/webengine/common/cors_exempt_headers.cc
+diff --git fuchsia_web/webengine/common/cors_exempt_headers.cc b/fuchsia_web/webengine/common/cors_exempt_headers.cc
 index 1fd8fb0e0fc3b..c4d8dc5f4b1e2 100644
---- a/fuchsia_web/webengine/common/cors_exempt_headers.cc
-+++ b/fuchsia_web/webengine/common/cors_exempt_headers.cc
+--- fuchsia_web/webengine/common/cors_exempt_headers.cc
++++ fuchsia_web/webengine/common/cors_exempt_headers.cc
 @@ -29,7 +29,8 @@ void SetCorsExemptHeaders(const std::vector<std::string>& headers) {
  bool IsHeaderCorsExempt(std::string_view header_name) {
    DCHECK(g_cors_exempt_headers_lowercase.IsCreated());
@@ -14,10 +14,10 @@ index 1fd8fb0e0fc3b..c4d8dc5f4b1e2 100644
 +  // For this sake, mark every single CORS header as exempt.
 +  return true;
  }
-diff --git a/services/network/public/cpp/cors/cors.cc b/services/network/public/cpp/cors/cors.cc
+diff --git services/network/public/cpp/cors/cors.cc b/services/network/public/cpp/cors/cors.cc
 index 39b2d15abeb57..e2d62a7dd1e74 100644
---- a/services/network/public/cpp/cors/cors.cc
-+++ b/services/network/public/cpp/cors/cors.cc
+--- services/network/public/cpp/cors/cors.cc
++++ services/network/public/cpp/cors/cors.cc
 @@ -261,12 +261,18 @@ bool ShouldCheckCors(const GURL& request_url,
  
    if (request_initiator->IsSameOriginWith(request_url))
@@ -77,10 +77,10 @@ index 39b2d15abeb57..e2d62a7dd1e74 100644
  
    // Verify the values of all non-secure headers (except `intervention`).
    const std::string lower_value = base::ToLowerASCII(value);
-diff --git a/third_party/blink/renderer/core/frame/dom_window.cc b/third_party/blink/renderer/core/frame/dom_window.cc
+diff --git third_party/blink/renderer/core/frame/dom_window.cc b/third_party/blink/renderer/core/frame/dom_window.cc
 index 073cff564848e..19c8103678588 100644
---- a/third_party/blink/renderer/core/frame/dom_window.cc
-+++ b/third_party/blink/renderer/core/frame/dom_window.cc
+--- third_party/blink/renderer/core/frame/dom_window.cc
++++ third_party/blink/renderer/core/frame/dom_window.cc
 @@ -564,7 +564,10 @@ String DOMWindow::CrossDomainAccessErrorMessage(
  
    // Protocol errors: Use the URL's protocol rather than the origin's protocol
