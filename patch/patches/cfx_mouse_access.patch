@@ -1,5 +1,5 @@
 diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.cc cef/libcef/browser/alloy/alloy_browser_host_impl.cc
-index b10a9fd42..01c21a136 100644
+index b10a9fd42..807678d24 100644
 --- cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 +++ cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 @@ -34,6 +34,8 @@
@@ -61,10 +61,12 @@ index b10a9fd42..01c21a136 100644
  void AlloyBrowserHostImpl::RequestMediaAccessPermission(
      content::WebContents* web_contents,
      const content::MediaStreamRequest& request,
-@@ -1244,6 +1289,42 @@ void AlloyBrowserHostImpl::WebContentsDestroyed() {
+@@ -1244,6 +1289,46 @@ void AlloyBrowserHostImpl::WebContentsDestroyed() {
    }
  }
  
++CfxExclusiveAccessContextImpl::~CfxExclusiveAccessContextImpl() = default;
++
 +Profile* CfxExclusiveAccessContextImpl::GetProfile() {
 +  return nullptr;
 +}
@@ -82,6 +84,8 @@ index b10a9fd42..01c21a136 100644
 +void CfxExclusiveAccessContextImpl::UpdateExclusiveAccessBubble(
 +    const ExclusiveAccessBubbleParams& params,
 +    ExclusiveAccessBubbleHideCallback first_hide_callback) {}
++
++void CfxExclusiveAccessContextImpl::UpdateUIForTabFullscreen() {}
 +
 +void CfxExclusiveAccessContextImpl::OnExclusiveAccessUserInput() {}
 +
@@ -104,7 +108,7 @@ index b10a9fd42..01c21a136 100644
  void AlloyBrowserHostImpl::StartAudioCapturer() {
    if (!client_.get() || audio_capturer_) {
      return;
-@@ -1267,6 +1348,10 @@ void AlloyBrowserHostImpl::StartAudioCapturer() {
+@@ -1267,6 +1352,10 @@ void AlloyBrowserHostImpl::StartAudioCapturer() {
        std::make_unique<CefAudioCapturer>(params, this, audio_handler);
  }
  
@@ -115,7 +119,7 @@ index b10a9fd42..01c21a136 100644
  // AlloyBrowserHostImpl private methods.
  // -----------------------------------------------------------------------------
  
-@@ -1284,7 +1369,8 @@ AlloyBrowserHostImpl::AlloyBrowserHostImpl(
+@@ -1284,7 +1373,8 @@ AlloyBrowserHostImpl::AlloyBrowserHostImpl(
                           browser_info,
                           request_context),
        content::WebContentsObserver(web_contents),
@@ -126,7 +130,7 @@ index b10a9fd42..01c21a136 100644
  
    if (opener.get()) {
 diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.h cef/libcef/browser/alloy/alloy_browser_host_impl.h
-index 705fb3411..4f0ea16c3 100644
+index 705fb3411..770805b78 100644
 --- cef/libcef/browser/alloy/alloy_browser_host_impl.h
 +++ cef/libcef/browser/alloy/alloy_browser_host_impl.h
 @@ -20,6 +20,7 @@
@@ -137,7 +141,7 @@ index 705fb3411..4f0ea16c3 100644
  #include "content/public/browser/web_contents.h"
  #include "content/public/browser/web_contents_delegate.h"
  #include "content/public/browser/web_contents_observer.h"
-@@ -27,6 +28,57 @@
+@@ -27,6 +28,64 @@
  class CefAudioCapturer;
  class CefBrowserInfo;
  class SiteInstance;
@@ -146,12 +150,19 @@ index 705fb3411..4f0ea16c3 100644
 +class CfxExclusiveAccessContextImpl : public ExclusiveAccessContext {
 +public:
 +  CfxExclusiveAccessContextImpl(CefBrowserHostBase* base);
++
++  ~CfxExclusiveAccessContextImpl() override;
 +  // ExclusiveAccessContext methods.
 +  // Returns the current profile associated with the window.
 +  Profile* GetProfile() override;
 +
 +  // Returns whether the window hosting the browser view is fullscreen.
 +  bool IsFullscreen() const override;
++
++  // Called when we transition between tab and browser fullscreen. This method
++  // updates the UI by showing/hiding the tab strip, toolbar and bookmark bar
++  // in the browser fullscreen. Currently only supported on Mac.
++  void UpdateUIForTabFullscreen() override;
 +
 +  // Enters fullscreen and updates the exclusive access bubble.
 +  void EnterFullscreen(const url::Origin& origin,
@@ -195,7 +206,7 @@ index 705fb3411..4f0ea16c3 100644
  
  // CefBrowser implementation for Alloy style. Method calls are delegated to the
  // CefPlatformDelegate or the WebContents as appropriate. All methods are
-@@ -251,6 +303,17 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
+@@ -251,6 +310,17 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
                             const gfx::Size& pref_size) override;
    void ResizeDueToAutoResize(content::WebContents* source,
                               const gfx::Size& new_size) override;
@@ -213,7 +224,7 @@ index 705fb3411..4f0ea16c3 100644
    void RequestMediaAccessPermission(
        content::WebContents* web_contents,
        const content::MediaStreamRequest& request,
-@@ -329,6 +392,8 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
+@@ -329,6 +399,8 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
    // starts running when a tab stops being audible, and is canceled if it starts
    // being audible again before it fires.
    std::unique_ptr<base::OneShotTimer> recently_audible_timer_;
@@ -223,7 +234,7 @@ index 705fb3411..4f0ea16c3 100644
  
  #endif  // CEF_LIBCEF_BROWSER_ALLOY_ALLOY_BROWSER_HOST_IMPL_H_
 diff --git cef/libcef/browser/osr/render_widget_host_view_osr.cc cef/libcef/browser/osr/render_widget_host_view_osr.cc
-index 85e6202b9..8a2f5264b 100644
+index c586880a8..652102222 100644
 --- cef/libcef/browser/osr/render_widget_host_view_osr.cc
 +++ cef/libcef/browser/osr/render_widget_host_view_osr.cc
 @@ -516,12 +516,12 @@ void CefRenderWidgetHostViewOSR::OverrideDisplayFeatureForEmulation(
