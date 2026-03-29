@@ -1066,6 +1066,15 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
   /*--cef()--*/
   virtual bool IsRenderProcessUnresponsive() = 0;
 
+#if CEF_API_ADDED(CEF_NEXT)  
+  ///
+  /// Returns information about the current frame popup texture.
+  /// Use cef_lock_frame_info_t.
+  /// 
+  /*--cef(added=next)--*/
+  virtual void* LockFrame(cef_paint_element_type_t type) = 0;
+#endif
+
   ///
   /// Returns the runtime style for this browser (ALLOY or CHROME). See
   /// cef_runtime_style_t documentation for details.

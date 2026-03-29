@@ -4151,6 +4151,46 @@ typedef struct _cef_task_info_t {
   int is_gpu_memory_inflated;
 } cef_task_info_t;
 
+
+#if CEF_API_ADDED(CEF_NEXT)
+/// CFX: Lockframe patch
+///
+/// Structure representing lock frame information 
+/// 
+typedef struct _cef_lock_frame_info_t {
+  ///
+  /// Size of this structure.
+  ///
+  size_t size;
+
+  ///
+  /// Handle for the shared texture. The shared texture is instantiated
+  /// without a keyed mutex.
+  ///
+  cef_shared_texture_handle_t shared_handle;
+
+  ///
+  /// The paint type of the shared texture
+  ///
+  cef_paint_element_type_t paint_type;
+
+  /// 
+  /// The width of the frame.
+  /// 
+  int width;
+
+  ///
+  /// The height of the frame
+  /// 
+  int height;
+
+  ///
+  /// Rect consisting of changed elements.
+  /// 
+  cef_rect_t damage_rect;
+
+} cef_lock_frame_info_t;
+#endif
 #ifdef __cplusplus
 }
 #endif
