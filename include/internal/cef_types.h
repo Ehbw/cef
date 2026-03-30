@@ -4185,10 +4185,14 @@ typedef struct _cef_lock_frame_info_t {
   int height;
 
   ///
-  /// Rect consisting of changed elements.
+  /// Count of how many dirty rects there are.
   /// 
-  cef_rect_t damage_rect;
+  int dirty_rect_count;
 
+  ///
+  /// Rect's consisting of changed elements. 
+  ///
+  cef_rect_t dirty_rects[10];
 } cef_lock_frame_info_t;
 #endif
 #ifdef __cplusplus

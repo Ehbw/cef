@@ -47,6 +47,8 @@
 #include "include/internal/cef_types_osr.h"
 #include "include/internal/cef_types_runtime.h"
 
+#include "include/cef_api_hash.h"
+
 #define kNullCursorHandle NULL
 #define kNullEventHandle NULL
 #define kNullWindowHandle NULL
