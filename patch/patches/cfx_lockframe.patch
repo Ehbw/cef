@@ -122,7 +122,7 @@ index cdc84ed35..4c6b47ea0 100644
    void NotifyScreenInfoChanged() override;
    void Invalidate(cef_paint_element_type_t type) override;
 diff --git cef/libcef/browser/osr/render_widget_host_view_osr.cc cef/libcef/browser/osr/render_widget_host_view_osr.cc
-index 85e6202b9..ebd7896bf 100644
+index 85e6202b9..c40cb0f57 100644
 --- cef/libcef/browser/osr/render_widget_host_view_osr.cc
 +++ cef/libcef/browser/osr/render_widget_host_view_osr.cc
 @@ -56,6 +56,7 @@
@@ -133,7 +133,43 @@ index 85e6202b9..ebd7896bf 100644
  
  namespace {
  
-@@ -1637,6 +1638,15 @@ void CefRenderWidgetHostViewOSR::OnPaint(const gfx::Rect& damage_rect,
+@@ -217,7 +218,8 @@ CefRenderWidgetHostViewOSR::CefRenderWidgetHostViewOSR(
+       pinch_zoom_enabled_(input::switches::IsPinchToZoomEnabled()),
+       mouse_wheel_phase_handler_(this),
+       gesture_provider_(CreateGestureProviderConfig(), this),
+-      weak_ptr_factory_(this) {
++      weak_ptr_factory_(this)
++{
+   DCHECK(render_widget_host_);
+   DCHECK(!render_widget_host_->GetView());
+ 
+@@ -1015,6 +1017,7 @@ void CefRenderWidgetHostViewOSR::OnFrameComplete(
+   DCHECK_EQ(begin_frame_source_.source_id(), ack.frame_id.source_id);
+   DCHECK_EQ(begin_frame_number_, ack.frame_id.sequence_number);
+   begin_frame_pending_ = false;
++  had_frame_ = true;
+ }
+ 
+ void CefRenderWidgetHostViewOSR::OnRenderFrameMetadataChangedAfterActivation(
+@@ -1057,6 +1060,9 @@ void CefRenderWidgetHostViewOSR::OnRenderFrameMetadataChangedAfterActivation(
+ 
+ std::unique_ptr<viz::HostDisplayClient>
+ CefRenderWidgetHostViewOSR::CreateHostDisplayClient() {
++  if (had_frame_) {
++     begin_frame_pending_ = false;
++  }
+   host_display_client_ =
+       new CefHostDisplayClientOSR(this, gfx::kNullAcceleratedWidget);
+   host_display_client_->SetActive(true);
+@@ -1174,6 +1180,7 @@ void CefRenderWidgetHostViewOSR::SendExternalBeginFrame() {
+   }
+   begin_frame_pending_ = true;
+ 
++
+   base::TimeTicks frame_time = base::TimeTicks::Now();
+   base::TimeTicks deadline = base::TimeTicks();
+   base::TimeDelta interval = viz::BeginFrameArgs::DefaultInterval();
+@@ -1637,6 +1644,15 @@ void CefRenderWidgetHostViewOSR::OnPaint(const gfx::Rect& damage_rect,
    }
  }
  
@@ -150,21 +186,65 @@ index 85e6202b9..ebd7896bf 100644
      const gfx::Rect& damage_rect,
      const gfx::Size& pixel_size,
 diff --git cef/libcef/browser/osr/render_widget_host_view_osr.h cef/libcef/browser/osr/render_widget_host_view_osr.h
-index 967ac0f80..b816cc770 100644
+index 967ac0f80..08220a611 100644
 --- cef/libcef/browser/osr/render_widget_host_view_osr.h
 +++ cef/libcef/browser/osr/render_widget_host_view_osr.h
-@@ -263,6 +263,10 @@ class CefRenderWidgetHostViewOSR
+@@ -38,6 +38,12 @@
+ #include "ui/events/velocity_tracker/motion_event_generic.h"
+ #include "ui/gfx/geometry/rect.h"
+ 
++// CFX: Frame pacing improvements
++#include "components/viz/service/frame_sinks/external_begin_frame_source_win.h"
++#include "components/viz/common/frame_sinks/begin_frame_source.h"
++#include "ui/gl/vsync_thread_win.h"
++//
++
+ #if BUILDFLAG(IS_MAC)
+ #include "content/browser/renderer_host/browser_compositor_view_mac.h"
+ #endif
+@@ -93,10 +99,16 @@ class MacHelper;
+ 
+ class CefRenderWidgetHostViewOSR
+     : public content::RenderWidgetHostViewBase,
++      // CFX: add VSyncObserver & BeginFrameObserver in an attempt to improve frametimes
++      // TODO: This didn't change anything. 
++      //public viz::BeginFrameObserverBase,
++      //public gl::VSyncThreadWin::VSyncObserver,
++      //
+       public content::RenderFrameMetadataProvider::Observer,
+       public ui::CompositorDelegate,
+       public content::TextInputManager::Observer,
+-      public ui::GestureProviderClient {
++      public ui::GestureProviderClient
++{
+  public:
+   CefRenderWidgetHostViewOSR(SkColor background_color,
+                              bool use_shared_texture,
+@@ -238,6 +250,13 @@ class CefRenderWidgetHostViewOSR
+       blink::mojom::InputEventResultState ack_result) override;
+   void OnGestureEvent(const ui::GestureEventData& gesture) override;
+ 
++  // BeginFrameObserverBase implementation:
++  //bool OnBeginFrameDerivedImpl(const viz::BeginFrameArgs& args) override;
++  //void OnBeginFrameSourcePausedChanged(bool paused) override {}
++
++  // ui:VSyncObserver implementation
++  //void OnVSync(base::TimeTicks vsync_time, base::TimeDelta interval) override;
++
+   bool InstallTransparency();
+ 
+   void WasResized();
+@@ -263,6 +282,9 @@ class CefRenderWidgetHostViewOSR
                            const gfx::Size& pixel_size,
                            const CefAcceleratedPaintInfo& info);
  
-+#if CEF_API_ADDED(CEF_NEXT)
 +  void* LockFrame(cef_paint_element_type_t type);
-+#endif
++
 +
    void OnBeginFame(base::TimeTicks frame_time);
  
    bool IsPopupWidget() const {
-@@ -321,6 +325,21 @@ class CefRenderWidgetHostViewOSR
+@@ -321,6 +343,21 @@ class CefRenderWidgetHostViewOSR
  
    ui::TextInputType GetTextInputType();
  
@@ -186,8 +266,16 @@ index 967ac0f80..b816cc770 100644
    bool is_hidden() const { return !is_showing_; }
  
   private:
+@@ -408,6 +445,7 @@ class CefRenderWidgetHostViewOSR
+   viz::StubBeginFrameSource begin_frame_source_;
+   uint64_t begin_frame_number_ = viz::BeginFrameArgs::kStartingFrameNumber;
+   bool begin_frame_pending_ = false;
++  bool had_frame_ = false;
+ 
+   bool use_shared_texture_ = false;
+   bool sync_frame_rate_ = false;
 diff --git cef/libcef/browser/osr/video_consumer_osr.cc cef/libcef/browser/osr/video_consumer_osr.cc
-index 437bb2c8c..74af14810 100644
+index 437bb2c8c..6a0f9893c 100644
 --- cef/libcef/browser/osr/video_consumer_osr.cc
 +++ cef/libcef/browser/osr/video_consumer_osr.cc
 @@ -9,6 +9,7 @@
@@ -244,13 +332,15 @@ index 437bb2c8c..74af14810 100644
      // The info->pixel_format will tell if the texture is RGBA or BGRA
      // On Linux, X11 lacks support for RGBA_8888 so it might be BGRA.
      // On Windows and macOS, it should always be RGBA.
-@@ -165,15 +198,60 @@ void CefVideoConsumerOSR::OnFrameCaptured(
+@@ -165,15 +198,67 @@ void CefVideoConsumerOSR::OnFrameCaptured(
        auto size = info->metadata.source_size.value();
        extra.source_size = {size.width(), size.height()};
      }
 -
 +#endif
  #if BUILDFLAG(IS_WIN)
++
++    // CFX: Introduce LockFrame Mechanism.
 +    std::scoped_lock _(frame_mutex_);
      auto& gmb_handle = data->get_gpu_memory_buffer_handle();
 +
@@ -260,38 +350,42 @@ index 437bb2c8c..74af14810 100644
 +        CefVideoConsumerOSR* consumer = parent->GetVideoConsumer();
 +        if (consumer) {
 +          std::scoped_lock lock(consumer->frame_mutex_);
-+          consumer->slots_[PET_POPUP].pending = gmb_handle.Clone();
-+          consumer->slots_[PET_POPUP].last_info.width = info->coded_size.width();
-+          consumer->slots_[PET_POPUP].last_info.height = info->coded_size.height();
++          auto& slot = consumer->slots_[PET_POPUP];
++
++          slot.pending = gmb_handle.Clone();
++          slot.last_info.width = info->coded_size.width();
++          slot.last_info.height = info->coded_size.height();
 +
 +          gfx::Rect rect_in_pixels(0, 0, info->coded_size.width(), info->coded_size.height());
 +          rect_in_pixels.Intersect(damage_rect);
 +
 +          if (damage_rect.x() == 0 && damage_rect.y() == 0 &&
 +              damage_rect.width() == info->coded_size.width() &&
-+              info->coded_size.height()){
-+            consumer->slots_[PET_POPUP].ClearRects();
++              damage_rect.height() == info->coded_size.height()) {
++            slot.ClearRects();
 +          } else {
-+            consumer->slots_[PET_POPUP].PushRect(rect_in_pixels);
++            slot.PushRect(rect_in_pixels);
 +          }
 +        }
 +      }
 +    } else {
-+      slots_[PET_VIEW].pending = gmb_handle.Clone();
-+      slots_[PET_VIEW].last_info.width = info->coded_size.width();
-+      slots_[PET_VIEW].last_info.height = info->coded_size.height();
++      auto& slot = slots_[PET_VIEW];
++      slot.pending = gmb_handle.Clone();
++      slot.last_info.width = info->coded_size.width();
++      slot.last_info.height = info->coded_size.height();
 +
 +      gfx::Rect rect_in_pixels(0, 0, info->coded_size.width(), info->coded_size.height());
 +      rect_in_pixels.Intersect(damage_rect);
 +
 +      if (damage_rect.x() == 0 && damage_rect.y() == 0 &&
 +          damage_rect.width() == info->coded_size.width() &&
-+          info->coded_size.height()) {
-+        slots_[PET_VIEW].ClearRects();
++          damage_rect.height() == info->coded_size.height()) {
++        slot.ClearRects();
 +      } else {
-+        slots_[PET_VIEW].PushRect(rect_in_pixels);
++        slot.PushRect(rect_in_pixels);
 +      }
 +    }
++    //
 +
 +    // CFX: Remove OSR callback
 +#if 0
@@ -303,6 +397,7 @@ index 437bb2c8c..74af14810 100644
      paint_info.format = pixel_format;
      view_->OnAcceleratedPaint(damage_rect, info->coded_size, paint_info);
 +#endif
++    //
  #elif BUILDFLAG(IS_APPLE)
      auto& gmb_handle = data->get_gpu_memory_buffer_handle();
      cef_accelerated_paint_info_t paint_info = {
