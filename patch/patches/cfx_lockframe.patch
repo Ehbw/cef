@@ -1,5 +1,5 @@
 diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.cc cef/libcef/browser/alloy/alloy_browser_host_impl.cc
-index b10a9fd42..91a27b65d 100644
+index b10a9fd42..21b5feb4e 100644
 --- cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 +++ cef/libcef/browser/alloy/alloy_browser_host_impl.cc
 @@ -14,6 +14,7 @@
@@ -10,35 +10,45 @@ index b10a9fd42..91a27b65d 100644
  #include "cef/libcef/browser/audio_capturer.h"
  #include "cef/libcef/browser/browser_context.h"
  #include "cef/libcef/browser/browser_guest_util.h"
-@@ -341,6 +344,14 @@ void AlloyBrowserHostImpl::ExecuteChromeCommand(
+@@ -341,6 +344,20 @@ void AlloyBrowserHostImpl::ExecuteChromeCommand(
    NOTIMPLEMENTED();
  }
  
 +void* AlloyBrowserHostImpl::LockFrame(cef_paint_element_type_t type) {
-+    if (!platform_delegate_)
-+    {
++    if (!platform_delegate_) {
 +        return nullptr;
 +    }
 +    return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->LockFrame(type);
++}
++
++bool AlloyBrowserHostImpl::ReleaseFrame(cef_paint_element_type_t type) {
++    if (!platform_delegate_) {
++        return false;
++    }
++    return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->ReleaseFrame(type);
 +}
 +
  bool AlloyBrowserHostImpl::IsWindowRenderingDisabled() {
    return IsWindowless();
  }
 diff --git cef/libcef/browser/alloy/alloy_browser_host_impl.h cef/libcef/browser/alloy/alloy_browser_host_impl.h
-index 705fb3411..0bcfea703 100644
+index 705fb3411..d7a47d1f4 100644
 --- cef/libcef/browser/alloy/alloy_browser_host_impl.h
 +++ cef/libcef/browser/alloy/alloy_browser_host_impl.h
-@@ -112,6 +164,7 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
-   bool CanExecuteChromeCommand(int command_id) override;
+@@ -113,6 +165,11 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
    void ExecuteChromeCommand(int command_id,
                              cef_window_open_disposition_t disposition) override;
-+  void* LockFrame(cef_paint_element_type_t type) override;
  
++  // CFX: Lockframe patch
++  void* LockFrame(cef_paint_element_type_t type) override;
++  bool ReleaseFrame(cef_paint_element_type_t type) override;
++  //
++
    // CefBrowserHostBase methods:
    bool IsWindowless() const override;
+   bool IsAlloyStyle() const override { return true; }
 diff --git cef/libcef/browser/chrome/chrome_browser_host_impl.cc cef/libcef/browser/chrome/chrome_browser_host_impl.cc
-index 22eb68e14..41a77df99 100644
+index 22eb68e14..0c90c68a8 100644
 --- cef/libcef/browser/chrome/chrome_browser_host_impl.cc
 +++ cef/libcef/browser/chrome/chrome_browser_host_impl.cc
 @@ -8,6 +8,7 @@
@@ -49,80 +59,87 @@ index 22eb68e14..41a77df99 100644
  #include "cef/libcef/browser/chrome/views/chrome_browser_view.h"
  #include "cef/libcef/browser/chrome/views/chrome_browser_widget.h"
  #include "cef/libcef/browser/thread_util.h"
-@@ -21,6 +22,7 @@
- #include "chrome/browser/ui/tabs/tab_strip_model.h"
- #include "chrome/browser/ui/views/frame/contents_web_view.h"
- #include "chrome/common/pref_names.h"
-+#include <libcef/common/api_version_util.h>
- 
- // static
- CefRefPtr<ChromeBrowserHostImpl> ChromeBrowserHostImpl::Create(
-@@ -342,6 +344,15 @@ void ChromeBrowserHostImpl::ExecuteChromeCommand(
+@@ -342,6 +343,20 @@ void ChromeBrowserHostImpl::ExecuteChromeCommand(
    }
  }
  
 +void* ChromeBrowserHostImpl::LockFrame(cef_paint_element_type_t type) {
-+    if (CEF_API_IS_ADDED(CEF_NEXT) && platform_delegate_)
-+    {
++    if (platform_delegate_) {
 +        return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->LockFrame(type);
 +    }
 +    return nullptr;
 +}
 +
++bool ChromeBrowserHostImpl::ReleaseFrame(cef_paint_element_type_t type) {
++  if (platform_delegate_) {
++      return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->ReleaseFrame(type);
++  }
++  return false;
++}
 +
  ChromeBrowserView* ChromeBrowserHostImpl::chrome_browser_view() const {
    if (browser_ && is_views_hosted_) {
      return static_cast<ChromeBrowserView*>(browser_->window());
 diff --git cef/libcef/browser/chrome/chrome_browser_host_impl.h cef/libcef/browser/chrome/chrome_browser_host_impl.h
-index 98e7dde38..1f03753fc 100644
+index 98e7dde38..9921a5939 100644
 --- cef/libcef/browser/chrome/chrome_browser_host_impl.h
 +++ cef/libcef/browser/chrome/chrome_browser_host_impl.h
-@@ -106,6 +106,8 @@ class ChromeBrowserHostImpl : public CefBrowserHostBase {
+@@ -106,6 +106,10 @@ class ChromeBrowserHostImpl : public CefBrowserHostBase {
    bool CanExecuteChromeCommand(int command_id) override;
    void ExecuteChromeCommand(int command_id,
                              cef_window_open_disposition_t disposition) override;
++  // CFX: Lockframe patch
 +  void* LockFrame(cef_paint_element_type_t type) override;
-+
++  bool ReleaseFrame(cef_paint_element_type_t type) override;
++  //
  
    Browser* browser() const { return browser_; }
  
 diff --git cef/libcef/browser/osr/browser_platform_delegate_osr.cc cef/libcef/browser/osr/browser_platform_delegate_osr.cc
-index 44e49530f..421cd6407 100644
+index 44e49530f..f2fae8bd2 100644
 --- cef/libcef/browser/osr/browser_platform_delegate_osr.cc
 +++ cef/libcef/browser/osr/browser_platform_delegate_osr.cc
-@@ -244,6 +244,15 @@ bool CefBrowserPlatformDelegateOsr::IsHidden() const {
+@@ -244,6 +244,22 @@ bool CefBrowserPlatformDelegateOsr::IsHidden() const {
    return true;
  }
  
 +void* CefBrowserPlatformDelegateOsr::LockFrame(cef_paint_element_type_t type) {
 +  CefRenderWidgetHostViewOSR* view = GetOSRHostView();
-+  if (view)
-+  {
++  if (view) {
 +    return view->LockFrame(type);
 +  }
 +  return nullptr;
++}
++
++bool CefBrowserPlatformDelegateOsr::ReleaseFrame(cef_paint_element_type_t type) {
++  CefRenderWidgetHostViewOSR* view = GetOSRHostView();
++  if (view) {
++    return view->ReleaseFrame(type);
++  }
++  return false;
 +}
 +
  void CefBrowserPlatformDelegateOsr::NotifyScreenInfoChanged() {
    CefRenderWidgetHostViewOSR* view = GetOSRHostView();
    if (view) {
 diff --git cef/libcef/browser/osr/browser_platform_delegate_osr.h cef/libcef/browser/osr/browser_platform_delegate_osr.h
-index cdc84ed35..4c6b47ea0 100644
+index cdc84ed35..100ede434 100644
 --- cef/libcef/browser/osr/browser_platform_delegate_osr.h
 +++ cef/libcef/browser/osr/browser_platform_delegate_osr.h
-@@ -55,6 +55,10 @@ class CefBrowserPlatformDelegateOsr
+@@ -55,6 +55,11 @@ class CefBrowserPlatformDelegateOsr
    std::unique_ptr<CefMenuRunner> CreateMenuRunner() override;
    bool IsWindowless() const override;
    void WasHidden(bool hidden) override;
 +
-+#if CEF_API_ADDED(CEF_NEXT)
++  // CFX: Lockframe patch
 +  virtual void* LockFrame(cef_paint_element_type_t type);
-+#endif
++  virtual bool ReleaseFrame(cef_paint_element_type_t type);
++
    bool IsHidden() const override;
    void NotifyScreenInfoChanged() override;
    void Invalidate(cef_paint_element_type_t type) override;
 diff --git cef/libcef/browser/osr/render_widget_host_view_osr.cc cef/libcef/browser/osr/render_widget_host_view_osr.cc
-index 85e6202b9..c40cb0f57 100644
+index 85e6202b9..f8b042287 100644
 --- cef/libcef/browser/osr/render_widget_host_view_osr.cc
 +++ cef/libcef/browser/osr/render_widget_host_view_osr.cc
 @@ -56,6 +56,7 @@
@@ -169,24 +186,29 @@ index 85e6202b9..c40cb0f57 100644
    base::TimeTicks frame_time = base::TimeTicks::Now();
    base::TimeTicks deadline = base::TimeTicks();
    base::TimeDelta interval = viz::BeginFrameArgs::DefaultInterval();
-@@ -1637,6 +1644,15 @@ void CefRenderWidgetHostViewOSR::OnPaint(const gfx::Rect& damage_rect,
+@@ -1637,6 +1644,20 @@ void CefRenderWidgetHostViewOSR::OnPaint(const gfx::Rect& damage_rect,
    }
  }
  
-+void* CefRenderWidgetHostViewOSR::LockFrame(cef_paint_element_type_t type)
-+{
-+  if (CEF_API_IS_ADDED(CEF_NEXT) && video_consumer_)
-+  {
++void* CefRenderWidgetHostViewOSR::LockFrame(cef_paint_element_type_t type) {
++  if (video_consumer_) {
 +    return video_consumer_->LockFrame(type);
 +  }
 +  return nullptr;
++}
++
++bool CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type) {
++  if (video_consumer_) {
++    return video_consumer_->ReleaseFrame(type);
++  }
++  return false;
 +}
 +
  void CefRenderWidgetHostViewOSR::OnAcceleratedPaint(
      const gfx::Rect& damage_rect,
      const gfx::Size& pixel_size,
 diff --git cef/libcef/browser/osr/render_widget_host_view_osr.h cef/libcef/browser/osr/render_widget_host_view_osr.h
-index 967ac0f80..08220a611 100644
+index 967ac0f80..c86ce93d6 100644
 --- cef/libcef/browser/osr/render_widget_host_view_osr.h
 +++ cef/libcef/browser/osr/render_widget_host_view_osr.h
 @@ -38,6 +38,12 @@
@@ -239,7 +261,7 @@ index 967ac0f80..08220a611 100644
                            const CefAcceleratedPaintInfo& info);
  
 +  void* LockFrame(cef_paint_element_type_t type);
-+
++  bool ReleaseFrame(cef_paint_element_type_t type);
 +
    void OnBeginFame(base::TimeTicks frame_time);
  
@@ -275,7 +297,7 @@ index 967ac0f80..08220a611 100644
    bool use_shared_texture_ = false;
    bool sync_frame_rate_ = false;
 diff --git cef/libcef/browser/osr/video_consumer_osr.cc cef/libcef/browser/osr/video_consumer_osr.cc
-index 437bb2c8c..6a0f9893c 100644
+index 437bb2c8c..af2983569 100644
 --- cef/libcef/browser/osr/video_consumer_osr.cc
 +++ cef/libcef/browser/osr/video_consumer_osr.cc
 @@ -9,6 +9,7 @@
@@ -286,13 +308,12 @@ index 437bb2c8c..6a0f9893c 100644
  
  namespace {
  
-@@ -78,6 +79,36 @@ void CefVideoConsumerOSR::RequestRefreshFrame(
+@@ -78,6 +79,56 @@ void CefVideoConsumerOSR::RequestRefreshFrame(
    video_capturer_->RequestRefreshFrame();
  }
  
 +
-+void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type)
-+{
++void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
 +  std::scoped_lock _(frame_mutex_);
 +  if (type < PET_VIEW || type > PET_POPUP)
 +  {
@@ -304,6 +325,8 @@ index 437bb2c8c..6a0f9893c 100644
 +  {
 +    slot.current = std::move(slot.pending);
 +    slot.pending = gfx::GpuMemoryBufferHandle();
++    slot.current_callback = std::move(slot.pending_callback);
++    slot.pending_callback.reset();
 +  }
 +
 +  if (slot.current.is_null())
@@ -320,10 +343,42 @@ index 437bb2c8c..6a0f9893c 100644
 +  return &slot.last_info;
 +}
 +
++
++bool CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type) {
++    std::scoped_lock _(frame_mutex_);
++    if (type < PET_VIEW || type > PET_POPUP) {
++      return false;
++    }
++
++    TypedSlot& slot = slots_[type];
++    if (slot.current_callback && slot.runner) {
++      slot.runner->PostTask(
++        FROM_HERE,
++        base::BindOnce([](mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> c) { 
++          c->Done(); 
++        }, std::move(slot.current_callback)));
++      return true;
++    }
++    return false;
++}
++
  // Frame size values are as follows:
  //   info->coded_size = Width and height of the video frame. Not all pixels in
  //   this region are valid.
-@@ -124,6 +155,8 @@ void CefVideoConsumerOSR::OnFrameCaptured(
+@@ -92,7 +143,11 @@ void CefVideoConsumerOSR::OnFrameCaptured(
+     const gfx::Rect& content_rect,
+     mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
+         callbacks) {
+-  ScopedVideoFrameDone scoped_done(std::move(callbacks));
++  
++  // CFX: remove callback RAII guard. This is now handled with ReleaseFrame
++  // When using LockFrame patch, it is now vital that you call ReleaseFrame
++  // Otherwise the frame will no longer get automatically returned to the pool.
++  //ScopedVideoFrameDone scoped_done(std::move(callbacks));
+ 
+   media::VideoFrameMetadata metadata = info->metadata;
+   gfx::Rect damage_rect;
+@@ -124,6 +179,8 @@ void CefVideoConsumerOSR::OnFrameCaptured(
            (info->pixel_format == media::PIXEL_FORMAT_ARGB ||
             info->pixel_format == media::PIXEL_FORMAT_ABGR));
  
@@ -332,17 +387,18 @@ index 437bb2c8c..6a0f9893c 100644
      // The info->pixel_format will tell if the texture is RGBA or BGRA
      // On Linux, X11 lacks support for RGBA_8888 so it might be BGRA.
      // On Windows and macOS, it should always be RGBA.
-@@ -165,15 +198,67 @@ void CefVideoConsumerOSR::OnFrameCaptured(
+@@ -165,15 +222,82 @@ void CefVideoConsumerOSR::OnFrameCaptured(
        auto size = info->metadata.source_size.value();
        extra.source_size = {size.width(), size.height()};
      }
 -
 +#endif
  #if BUILDFLAG(IS_WIN)
+-    auto& gmb_handle = data->get_gpu_memory_buffer_handle();
 +
 +    // CFX: Introduce LockFrame Mechanism.
 +    std::scoped_lock _(frame_mutex_);
-     auto& gmb_handle = data->get_gpu_memory_buffer_handle();
++    auto gmb_handle = std::move(data->get_gpu_memory_buffer_handle());
 +
 +    if (view_->IsPopupWidget()) {
 +      CefRenderWidgetHostViewOSR* parent = view_->GetParentHostView();
@@ -352,9 +408,16 @@ index 437bb2c8c..6a0f9893c 100644
 +          std::scoped_lock lock(consumer->frame_mutex_);
 +          auto& slot = consumer->slots_[PET_POPUP];
 +
-+          slot.pending = gmb_handle.Clone();
++          if (slot.pending_callback) {
++            slot.pending_callback->Done();
++            slot.pending_callback.reset();
++          }
++
++          slot.pending = std::move(gmb_handle);
 +          slot.last_info.width = info->coded_size.width();
 +          slot.last_info.height = info->coded_size.height();
++          slot.pending_callback.Bind(std::move(callbacks));
++          slot.runner = base::SequencedTaskRunner::GetCurrentDefault();
 +
 +          gfx::Rect rect_in_pixels(0, 0, info->coded_size.width(), info->coded_size.height());
 +          rect_in_pixels.Intersect(damage_rect);
@@ -370,9 +433,17 @@ index 437bb2c8c..6a0f9893c 100644
 +      }
 +    } else {
 +      auto& slot = slots_[PET_VIEW];
-+      slot.pending = gmb_handle.Clone();
++
++      if (slot.pending_callback) {
++        slot.pending_callback->Done();
++        slot.pending_callback.reset();
++      }
++
++      slot.pending = std::move(gmb_handle);
 +      slot.last_info.width = info->coded_size.width();
 +      slot.last_info.height = info->coded_size.height();
++      slot.pending_callback.Bind(std::move(callbacks));
++      slot.runner = base::SequencedTaskRunner::GetCurrentDefault();
 +
 +      gfx::Rect rect_in_pixels(0, 0, info->coded_size.width(), info->coded_size.height());
 +      rect_in_pixels.Intersect(damage_rect);
@@ -402,10 +473,10 @@ index 437bb2c8c..6a0f9893c 100644
      auto& gmb_handle = data->get_gpu_memory_buffer_handle();
      cef_accelerated_paint_info_t paint_info = {
 diff --git cef/libcef/browser/osr/video_consumer_osr.h cef/libcef/browser/osr/video_consumer_osr.h
-index c5aad5c6e..d06907ab0 100644
+index c5aad5c6e..ba2903698 100644
 --- cef/libcef/browser/osr/video_consumer_osr.h
 +++ cef/libcef/browser/osr/video_consumer_osr.h
-@@ -2,14 +2,40 @@
+@@ -2,14 +2,47 @@
  #define LIBCEF_BROWSER_OSR_VIDEO_CONSUMER_OSR_H_
  
  #include <optional>
@@ -423,6 +494,13 @@ index c5aad5c6e..d06907ab0 100644
 +struct TypedSlot {
 +  gfx::GpuMemoryBufferHandle current;
 +  gfx::GpuMemoryBufferHandle pending;
++
++  // This runner can be re-used.
++  scoped_refptr<base::SequencedTaskRunner> runner;
++
++  mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> current_callback;
++  mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> pending_callback;
++
 +  cef_lock_frame_info_t last_info = {sizeof(cef_lock_frame_info_t)};
 +
 +  // Keep in sync with cef_lock_frame_info_t::dirty_rects in cef_types.h
@@ -439,22 +517,27 @@ index c5aad5c6e..d06907ab0 100644
 +
 +  void ClearRects() {
 +    dirty_rects_count = 0;
-+    memset(&dirty_rects, 0, sizeof(dirty_rects));
++    memset(&dirty_rects, 0, sizeof(cef_rect_t) * kMaxDirtyRects);
 +  }
 +};
 +
  class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
   public:
    CefVideoConsumerOSR(CefRenderWidgetHostViewOSR* view,
-@@ -24,6 +50,7 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
+@@ -24,7 +57,11 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
    void SetFrameRate(base::TimeDelta frame_rate);
    void SizeChanged(const gfx::Size& size_in_pixels);
    void RequestRefreshFrame(const std::optional<gfx::Rect>& bounds_in_pixels);
+-
++ 
++  // CFX: Lockframe patch
 +  void* LockFrame(cef_paint_element_type_t type);
- 
++  bool ReleaseFrame(cef_paint_element_type_t type);
++  //
   private:
    // viz::mojom::FrameSinkVideoConsumer implementation.
-@@ -46,6 +73,8 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
+   void OnFrameCaptured(
+@@ -46,6 +83,8 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
  
    gfx::Size size_in_pixels_;
    std::optional<gfx::Rect> bounds_in_pixels_;

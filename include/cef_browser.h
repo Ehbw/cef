@@ -1073,6 +1073,12 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
   /// 
   /*--cef(added=next)--*/
   virtual void* LockFrame(cef_paint_element_type_t type) = 0;
+
+  ///
+  /// Releases the current gfx handles for the associated window
+  ///
+  /*--cef(added=next)--*/
+  virtual bool ReleaseFrame(cef_paint_element_type_t type) = 0;
 #endif
 
   ///
