@@ -1075,7 +1075,7 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
   virtual void* LockFrame(cef_paint_element_type_t type) = 0;
 
   ///
-  /// Releases the current gfx handles for the associated window
+  /// Releases the texture tied to the provided handle.
   ///
   /*--cef(added=next)--*/
   virtual bool ReleaseFrame(cef_paint_element_type_t type) = 0;
