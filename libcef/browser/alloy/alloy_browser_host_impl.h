@@ -20,6 +20,7 @@
 #include "cef/libcef/browser/frame_host_impl.h"
 #include "cef/libcef/browser/menu_manager.h"
 #include "cef/libcef/browser/request_context_impl.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -27,6 +28,57 @@
 class CefAudioCapturer;
 class CefBrowserInfo;
 class SiteInstance;
+class ExclusiveAccessManager;
+
+class CfxExclusiveAccessContextImpl : public ExclusiveAccessContext {
+public:
+  CfxExclusiveAccessContextImpl(CefBrowserHostBase* base);
+  // ExclusiveAccessContext methods.
+  // Returns the current profile associated with the window.
+  Profile* GetProfile() override;
+
+  // Returns whether the window hosting the browser view is fullscreen.
+  bool IsFullscreen() const override;
+
+  // Enters fullscreen and updates the exclusive access bubble.
+  void EnterFullscreen(const url::Origin& origin,
+                               ExclusiveAccessBubbleType bubble_type,
+                               FullscreenTabParams fullscreen_tab_params) override;
+
+  // Exits fullscreen and updates the exclusive access bubble.
+  void ExitFullscreen() override;
+
+  // Updates the exclusive access bubble.
+  void UpdateExclusiveAccessBubble(
+      const ExclusiveAccessBubbleParams& params,
+      ExclusiveAccessBubbleHideCallback first_hide_callback) override;
+
+  // Returns whether the exclusive access bubble is currently shown.
+  bool IsExclusiveAccessBubbleDisplayed() const override;
+
+  // Informs the exclusive access system of some user input, which may update
+  // internal timers and/or re-display the bubble.
+  void OnExclusiveAccessUserInput() override;
+
+  // Returns the currently active WebContents, or nullptr if there is none.
+  content::WebContents* GetWebContentsForExclusiveAccess() override;
+
+  // window.setResizable(false) blocks user-initiated fullscreen requests, see:
+  // https://github.com/explainers-by-googlers/additional-windowing-controls/blocef/main/README.md
+  bool CanUserEnterFullscreen() const override;
+
+  // There are special modes where the user isn't allowed to exit fullscreen on
+  // their own, and this function allows us to check for that.
+  bool CanUserExitFullscreen() const override;
+
+  ExclusiveAccessManager* get_manager() { return exclusive_access_manager_.get(); }
+
+private:
+  CefBrowserHostBase* base_;
+  std::unique_ptr<ExclusiveAccessManager> exclusive_access_manager_;
+};
+
+
 
 // CefBrowser implementation for Alloy style. Method calls are delegated to the
 // CefPlatformDelegate or the WebContents as appropriate. All methods are
@@ -112,6 +164,13 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
   bool CanExecuteChromeCommand(int command_id) override;
   void ExecuteChromeCommand(int command_id,
                             cef_window_open_disposition_t disposition) override;
+
+  // CFX: Lockframe patch
+
+  void* LockFrame(cef_paint_element_type_t type) override;
+
+  bool ReleaseFrame(cef_paint_element_type_t type) override;
+  //
 
   // CefBrowserHostBase methods:
   bool IsWindowless() const override;
@@ -251,6 +310,17 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
                            const gfx::Size& pref_size) override;
   void ResizeDueToAutoResize(content::WebContents* source,
                              const gfx::Size& new_size) override;
+  void OnRequestPointerLock(content::WebContents* web_contents,
+                                     bool user_gesture,
+                                     bool last_unlocked_by_target,
+                                     bool allowed);
+  void RequestPointerLock(content::WebContents* web_contents,
+                          bool user_gesture,
+                          bool last_unlocked_by_target) override;
+  void LostPointerLock() override;
+  void RequestKeyboardLock(content::WebContents* web_contents,
+                           bool esc_key_locked) override;
+  void CancelKeyboardLockRequest(content::WebContents* web_contents) override;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
@@ -329,6 +399,8 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
   // starts running when a tab stops being audible, and is canceled if it starts
   // being audible again before it fires.
   std::unique_ptr<base::OneShotTimer> recently_audible_timer_;
+
+  std::unique_ptr<CfxExclusiveAccessContextImpl> exclusive_access_context_impl_;
 };
 
 #endif  // CEF_LIBCEF_BROWSER_ALLOY_ALLOY_BROWSER_HOST_IMPL_H_

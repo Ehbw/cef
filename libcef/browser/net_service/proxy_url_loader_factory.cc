@@ -546,15 +546,7 @@ void InterceptedRequest::Restart() {
             : network::mojom::CredentialsMode::kOmit;
   }
 
-  const bool should_add_origin_header =
-      // Cross-origin requests that are not kNavigate nor kNoCors.
-      should_check_cors ||
-      // Same-origin requests except for GET and HEAD.
-      (!is_cross_origin &&
-       request_.method != net::HttpRequestHeaders::kGetMethod &&
-       request_.method != net::HttpRequestHeaders::kHeadMethod);
-
-  if (should_add_origin_header) {
+  {
     // Match logic in navigation_request.cc AddAdditionalRequestHeaders.
     url::Origin origin_header_value =
         request_.request_initiator.value_or(url::Origin());

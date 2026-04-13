@@ -349,7 +349,7 @@ def transfer_tools_files(script_dir, build_dirs, output_dir):
         if len(file_name) == 0:
           raise Exception('Failed to parse %s command component: %s' % (mksnapshot_name, cmd))
         if cmd.startswith('../../'):
-          file_path = os.path.realpath(os.path.join(build_dir, cmd))
+          file_path = os.path.abspath(os.path.join(build_dir, cmd))
           # Validate input file/path.
           if not file_path.startswith(src_dir):
             raise Exception('Invalid %s command input file: %s' % (mksnapshot_name, file_path))
@@ -727,10 +727,10 @@ if (options.nosymbols and any(symbols_only_options)) or sum(symbols_only_options
 script_dir = os.path.dirname(__file__)
 
 # CEF root directory
-cef_dir = os.path.realpath(os.path.join(script_dir, os.pardir))
+cef_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
 
 # src directory
-src_dir = os.path.realpath(os.path.join(cef_dir, os.pardir))
+src_dir = os.path.abspath(os.path.join(cef_dir, os.pardir))
 
 if not git.is_checkout(cef_dir):
   raise Exception('Not a valid checkout: %s' % (cef_dir))

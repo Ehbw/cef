@@ -20,6 +20,9 @@
 #include "ui/display/screen.h"
 #include "ui/events/base_event_utils.h"
 
+//CFX: OSR mouse input event
+#include "ui/events/blink/web_input_event.h"
+
 CefBrowserPlatformDelegateOsr::CefBrowserPlatformDelegateOsr(
     std::unique_ptr<CefBrowserPlatformDelegateNative> native_delegate,
     bool use_shared_texture,
@@ -163,6 +166,20 @@ void CefBrowserPlatformDelegateOsr::SendTouchEvent(const CefTouchEvent& event) {
   }
 }
 
+// CFX: Introduce native OSR mouse wheel event
+void CefBrowserPlatformDelegateOsr::SendMouseWheelEventNative(const void* msg) {
+  CefRenderWidgetHostViewOSR* view = GetOSRHostView();
+  if (!view) {
+    return;
+  }
+
+#if defined(OS_WIN)
+  blink::WebMouseWheelEvent web_event =
+      ui::MakeWebMouseWheelEvent(ui::MouseWheelEvent(*(CHROME_MSG*)msg));
+  view->SendMouseWheelEvent(web_event);
+#endif
+}
+
 void CefBrowserPlatformDelegateOsr::SetFocus(bool setFocus) {
   CefRenderWidgetHostViewOSR* view = GetOSRHostView();
   if (view) {
@@ -242,6 +259,22 @@ bool CefBrowserPlatformDelegateOsr::IsHidden() const {
     return view->is_hidden();
   }
   return true;
+}
+
+void* CefBrowserPlatformDelegateOsr::LockFrame(cef_paint_element_type_t type) {
+  CefRenderWidgetHostViewOSR* view = GetOSRHostView();
+  if (view) {
+    return view->LockFrame(type);
+  }
+  return nullptr;
+}
+
+bool CefBrowserPlatformDelegateOsr::ReleaseFrame(cef_paint_element_type_t type) {
+  CefRenderWidgetHostViewOSR* view = GetOSRHostView();
+  if (view) {
+    return view->ReleaseFrame(type);
+  }
+  return false;
 }
 
 void CefBrowserPlatformDelegateOsr::NotifyScreenInfoChanged() {
