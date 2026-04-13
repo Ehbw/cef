@@ -427,6 +427,7 @@ void ChromeMainDelegateCef::PreSandboxStartup() {
   }
   if (!resources_dir.empty()) {
     base::PathService::Override(chrome::DIR_RESOURCES, resources_dir);
+    base::PathService::Override(base::DIR_ASSETS, resources_dir);
   }
 
   if (command_line->HasSwitch(switches::kLocalesDirPath)) {
