@@ -516,12 +516,12 @@ void CefRenderWidgetHostViewOSR::OverrideDisplayFeatureForEmulation(
 
 blink::mojom::PointerLockResult CefRenderWidgetHostViewOSR::LockPointer(
     bool request_unadjusted_movement) {
-  return blink::mojom::PointerLockResult::kPermissionDenied;
+  return blink::mojom::PointerLockResult::kUnsupportedOptions;
 }
 
 blink::mojom::PointerLockResult CefRenderWidgetHostViewOSR::ChangePointerLock(
     bool request_unadjusted_movement) {
-  return blink::mojom::PointerLockResult::kPermissionDenied;
+  return blink::mojom::PointerLockResult::kUnsupportedOptions;
 }
 
 void CefRenderWidgetHostViewOSR::UnlockPointer() {}
@@ -1015,6 +1015,7 @@ void CefRenderWidgetHostViewOSR::OnFrameComplete(
   DCHECK_EQ(begin_frame_source_.source_id(), ack.frame_id.source_id);
   DCHECK_EQ(begin_frame_number_, ack.frame_id.sequence_number);
   begin_frame_pending_ = false;
+  had_frame_ = true;
 }
 
 void CefRenderWidgetHostViewOSR::OnRenderFrameMetadataChangedAfterActivation(
@@ -1057,6 +1058,9 @@ void CefRenderWidgetHostViewOSR::OnRenderFrameMetadataChangedAfterActivation(
 
 std::unique_ptr<viz::HostDisplayClient>
 CefRenderWidgetHostViewOSR::CreateHostDisplayClient() {
+  if (had_frame_) {
+     begin_frame_pending_ = false;
+  }
   host_display_client_ =
       new CefHostDisplayClientOSR(this, gfx::kNullAcceleratedWidget);
   host_display_client_->SetActive(true);
@@ -1635,6 +1639,20 @@ void CefRenderWidgetHostViewOSR::OnPaint(const gfx::Rect& damage_rect,
       ReleaseResizeHold();
     }
   }
+}
+
+void* CefRenderWidgetHostViewOSR::LockFrame(cef_paint_element_type_t type) {
+  if (video_consumer_) {
+    return video_consumer_->LockFrame(type);
+  }
+  return nullptr;
+}
+
+bool CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type) {
+  if (video_consumer_) {
+    return video_consumer_->ReleaseFrame(type);
+  }
+  return false;
 }
 
 void CefRenderWidgetHostViewOSR::OnAcceleratedPaint(

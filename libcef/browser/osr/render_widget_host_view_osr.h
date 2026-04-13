@@ -263,6 +263,11 @@ class CefRenderWidgetHostViewOSR
                           const gfx::Size& pixel_size,
                           const CefAcceleratedPaintInfo& info);
 
+// CFX: Lockframe patch
+  void* LockFrame(cef_paint_element_type_t type);
+
+  bool ReleaseFrame(cef_paint_element_type_t type);
+//
   void OnBeginFame(base::TimeTicks frame_time);
 
   bool IsPopupWidget() const {
@@ -320,6 +325,21 @@ class CefRenderWidgetHostViewOSR
   }
 
   ui::TextInputType GetTextInputType();
+
+// CFX: Expose Parent Host view and video consumer for lockframe.
+  CefRenderWidgetHostViewOSR* GetParentHostView() const { 
+      if (has_parent_) {
+        return parent_host_view_.get();
+      }
+      return nullptr;
+  }
+
+  CefVideoConsumerOSR* GetVideoConsumer() const { 
+      if (video_consumer_) {
+        return video_consumer_.get();
+      }
+      return nullptr;
+  }
 
   bool is_hidden() const { return !is_showing_; }
 
@@ -408,6 +428,7 @@ class CefRenderWidgetHostViewOSR
   viz::StubBeginFrameSource begin_frame_source_;
   uint64_t begin_frame_number_ = viz::BeginFrameArgs::kStartingFrameNumber;
   bool begin_frame_pending_ = false;
+  bool had_frame_ = false;
 
   bool use_shared_texture_ = false;
   bool sync_frame_rate_ = false;

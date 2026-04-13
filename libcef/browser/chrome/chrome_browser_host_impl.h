@@ -106,6 +106,12 @@ class ChromeBrowserHostImpl : public CefBrowserHostBase {
   bool CanExecuteChromeCommand(int command_id) override;
   void ExecuteChromeCommand(int command_id,
                             cef_window_open_disposition_t disposition) override;
+  // CFX: Lockframe patch
+
+  void* LockFrame(cef_paint_element_type_t type) override;
+
+  bool ReleaseFrame(cef_paint_element_type_t type) override;
+  //
 
   Browser* browser() const { return browser_; }
 

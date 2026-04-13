@@ -14,6 +14,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/notimplemented.h"
 #include "cef/libcef/browser/alloy/browser_platform_delegate_alloy.h"
+#include "cef/libcef/browser/osr/browser_platform_delegate_osr.h"
 #include "cef/libcef/browser/audio_capturer.h"
 #include "cef/libcef/browser/browser_context.h"
 #include "cef/libcef/browser/browser_guest_util.h"
@@ -34,6 +35,8 @@
 #include "cef/libcef/common/values_impl.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
+#include "third_party/blink/public/mojom/input/pointer_lock_result.mojom-data-view.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/printing/browser/print_composite_client.h"
@@ -339,6 +342,20 @@ void AlloyBrowserHostImpl::ExecuteChromeCommand(
     int command_id,
     cef_window_open_disposition_t disposition) {
   NOTIMPLEMENTED();
+}
+
+void* AlloyBrowserHostImpl::LockFrame(cef_paint_element_type_t type) {
+    if (!platform_delegate_) {
+        return nullptr;
+    }
+    return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->LockFrame(type);
+}
+
+bool AlloyBrowserHostImpl::ReleaseFrame(cef_paint_element_type_t type) {
+    if (!platform_delegate_) {
+        return false;
+    }
+    return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->ReleaseFrame(type);
 }
 
 bool AlloyBrowserHostImpl::IsWindowRenderingDisabled() {
@@ -1118,6 +1135,49 @@ void AlloyBrowserHostImpl::ResizeDueToAutoResize(content::WebContents* source,
   contents_delegate_.ResizeDueToAutoResize(source, new_size);
 }
 
+void AlloyBrowserHostImpl::OnRequestPointerLock(
+    content::WebContents* web_contents,
+    bool user_gesture,
+    bool last_unlocked_by_target,
+    bool allowed) {
+  if (allowed) {
+    exclusive_access_context_impl_->get_manager()->pointer_lock_controller()->RequestToLockPointer(
+        web_contents, user_gesture, last_unlocked_by_target);
+  } else {
+    web_contents->GotResponseToPointerLockRequest(
+        blink::mojom::PointerLockResult::kPermissionDenied);
+  }
+}
+
+void AlloyBrowserHostImpl::RequestPointerLock(content::WebContents* web_contents,
+    bool user_gesture,
+    bool last_unlocked_by_target) {
+  if (IsWindowless()) {
+    web_contents->GotResponseToPointerLockRequest(
+      blink::mojom::PointerLockResult::kPermissionDenied);
+
+    return;
+  }
+  web_contents->GotResponseToPointerLockRequest(
+    blink::mojom::PointerLockResult::kSuccess);
+}
+
+void AlloyBrowserHostImpl::LostPointerLock() {
+  exclusive_access_context_impl_->get_manager()->pointer_lock_controller()->ExitExclusiveAccessToPreviousState();
+}
+
+void AlloyBrowserHostImpl::RequestKeyboardLock(content::WebContents* web_contents,
+    bool esc_key_locked) {
+  exclusive_access_context_impl_->get_manager()->keyboard_lock_controller()->RequestKeyboardLock(
+      web_contents, esc_key_locked);
+}
+
+void AlloyBrowserHostImpl::CancelKeyboardLockRequest(
+    content::WebContents* web_contents) {
+  exclusive_access_context_impl_->get_manager()->keyboard_lock_controller()
+      ->CancelKeyboardLockRequest(web_contents);
+}
+
 void AlloyBrowserHostImpl::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
@@ -1244,6 +1304,42 @@ void AlloyBrowserHostImpl::WebContentsDestroyed() {
   }
 }
 
+Profile* CfxExclusiveAccessContextImpl::GetProfile() {
+  return nullptr;
+}
+
+bool CfxExclusiveAccessContextImpl::IsFullscreen() const {
+  return base_->contents_delegate()->is_fullscreen();
+}
+
+void CfxExclusiveAccessContextImpl::EnterFullscreen(const url::Origin& origin,
+                                  ExclusiveAccessBubbleType bubble_type,
+                                  FullscreenTabParams fullscreen_tab_params) {}
+
+void CfxExclusiveAccessContextImpl::ExitFullscreen() {}
+
+void CfxExclusiveAccessContextImpl::UpdateExclusiveAccessBubble(
+    const ExclusiveAccessBubbleParams& params,
+    ExclusiveAccessBubbleHideCallback first_hide_callback) {}
+
+void CfxExclusiveAccessContextImpl::OnExclusiveAccessUserInput() {}
+
+content::WebContents* CfxExclusiveAccessContextImpl::GetWebContentsForExclusiveAccess() {
+  return base_->contents_delegate()->web_contents();
+}
+
+bool CfxExclusiveAccessContextImpl::CanUserEnterFullscreen() const {
+  return false;
+}
+
+bool CfxExclusiveAccessContextImpl::CanUserExitFullscreen() const {
+  return true;
+}
+
+bool CfxExclusiveAccessContextImpl::IsExclusiveAccessBubbleDisplayed() const {
+  return false;
+}
+
 void AlloyBrowserHostImpl::StartAudioCapturer() {
   if (!client_.get() || audio_capturer_) {
     return;
@@ -1267,6 +1363,10 @@ void AlloyBrowserHostImpl::StartAudioCapturer() {
       std::make_unique<CefAudioCapturer>(params, this, audio_handler);
 }
 
+CfxExclusiveAccessContextImpl::CfxExclusiveAccessContextImpl(CefBrowserHostBase* base) :
+    base_(base),
+    exclusive_access_manager_(std::make_unique<ExclusiveAccessManager>(this)) {}
+
 // AlloyBrowserHostImpl private methods.
 // -----------------------------------------------------------------------------
 
@@ -1284,7 +1384,8 @@ AlloyBrowserHostImpl::AlloyBrowserHostImpl(
                          browser_info,
                          request_context),
       content::WebContentsObserver(web_contents),
-      is_windowless_(platform_delegate_->IsWindowless()) {
+      is_windowless_(platform_delegate_->IsWindowless()),
+      exclusive_access_context_impl_(std::make_unique<CfxExclusiveAccessContextImpl>(this)) {
   contents_delegate_.ObserveWebContents(web_contents);
 
   if (opener.get()) {

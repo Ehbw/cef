@@ -8,6 +8,7 @@
 #include "base/notimplemented.h"
 #include "cef/libcef/browser/browser_platform_delegate.h"
 #include "cef/libcef/browser/chrome/browser_platform_delegate_chrome.h"
+#include "cef/libcef/browser/osr/browser_platform_delegate_osr.h"
 #include "cef/libcef/browser/chrome/views/chrome_browser_view.h"
 #include "cef/libcef/browser/chrome/views/chrome_browser_widget.h"
 #include "cef/libcef/browser/thread_util.h"
@@ -340,6 +341,20 @@ void ChromeBrowserHostImpl::ExecuteChromeCommand(
     chrome::ExecuteCommandWithDisposition(
         browser_, command_id, static_cast<WindowOpenDisposition>(disposition));
   }
+}
+
+void* ChromeBrowserHostImpl::LockFrame(cef_paint_element_type_t type) {
+    if (platform_delegate_) {
+        return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->LockFrame(type);
+    }
+    return nullptr;
+}
+
+bool ChromeBrowserHostImpl::ReleaseFrame(cef_paint_element_type_t type) {
+  if (platform_delegate_) {
+      return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->ReleaseFrame(type);
+  }
+  return false;
 }
 
 ChromeBrowserView* ChromeBrowserHostImpl::chrome_browser_view() const {
