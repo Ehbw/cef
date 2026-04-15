@@ -109,28 +109,39 @@ void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
 }
 
 bool CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type ) {
-    std::scoped_lock _(frame_mutex_);
-
     if (type < PET_VIEW || type > PET_POPUP) {
-      return false;
+        return false;
     }
 
-    FrameSlot& slot = slots_[type];
-    if (!slot.runner) {
-      return false;
+    mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> to_release;
+    scoped_refptr<base::SequencedTaskRunner> runner;
+
+    {
+      std::scoped_lock _(frame_mutex_);
+
+      FrameSlot& slot = slots_[type];
+      if (!slot.runner) {
+        return false;
+      }
+
+      if (slot.previous_callback) {
+        to_release = std::move(slot.previous_callback);
+        runner = slot.runner;
+      }
+
+      if (slot.current_callback) {
+        slot.previous_callback = std::move(slot.current_callback);
+        slot.current_callback.reset();
+      }
     }
 
-    if (slot.previous_callback) {
-      slot.runner->PostTask(
+    if (to_release && runner) {
+      runner->PostTask(
           FROM_HERE,
-          base::BindOnce([](mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> c) {
-            c->Done();
-          }, std::move(slot.previous_callback)));
-    }
-
-    if (slot.current_callback) {
-      slot.previous_callback = std::move(slot.current_callback);
-      slot.current_callback.reset();
+          base::BindOnce(
+              [](mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
+                     c) { c->Done(); },
+              std::move(to_release)));
     }
 
     return true;
@@ -227,7 +238,6 @@ void CefVideoConsumerOSR::OnFrameCaptured(
 #if BUILDFLAG(IS_WIN)
     // CFX: Introduce LockFrame Mechanism.
     {
-      std::scoped_lock _(frame_mutex_);
       auto gmb_handle = std::move(data->get_gpu_memory_buffer_handle());
 
       auto updateFrameInfo = [&gmb_handle, &damage_rect, &info, &callbacks](
@@ -267,11 +277,12 @@ void CefVideoConsumerOSR::OnFrameCaptured(
         if (parent) {
           CefVideoConsumerOSR* consumer = parent->GetVideoConsumer();
           if (consumer) {
-            std::scoped_lock lock(consumer->frame_mutex_);
+            std::scoped_lock lock(frame_mutex_, consumer->frame_mutex_);
             updateFrameInfo(consumer, PET_POPUP);
           }
         }
       } else {
+        std::scoped_lock _(frame_mutex_);
         updateFrameInfo(this, PET_VIEW);
       }
     }
@@ -281,11 +292,9 @@ void CefVideoConsumerOSR::OnFrameCaptured(
     // So we can continue M103 behaviour of opening the handle on chromes thread and passing it to the game for rendering
     // Ensuring we don't have any overhead from blocking for OpenSharedResource1/OpenShareHandle which may impact performance
     // LockFrame/ReleaseFrame still does a majority of the work for rendering.
-    // The old OSR implementation used to only have a single frame. 
-    // Unfortunately the current OSR implementation makes it impossible to achieve that
-    //cef_accelerated_paint_info_t paint_info = {
-    //    sizeof(cef_accelerated_paint_info_t)};
-    //view_->OnAcceleratedPaint(damage_rect, info->coded_size, paint_info);
+    cef_accelerated_paint_info_t paint_info = {
+        sizeof(cef_accelerated_paint_info_t)};
+    view_->OnAcceleratedPaint(damage_rect, info->coded_size, paint_info);
 
 #elif BUILDFLAG(IS_APPLE)
     auto& gmb_handle = data->get_gpu_memory_buffer_handle();
