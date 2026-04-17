@@ -110,7 +110,7 @@ class ChromeBrowserHostImpl : public CefBrowserHostBase {
 
   void* LockFrame(cef_paint_element_type_t type) override;
 
-  bool ReleaseFrame(cef_paint_element_type_t type) override;
+  bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id) override;
   //
 
   Browser* browser() const { return browser_; }

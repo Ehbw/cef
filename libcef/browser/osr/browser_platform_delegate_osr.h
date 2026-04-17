@@ -62,7 +62,7 @@ class CefBrowserPlatformDelegateOsr
   // CFX: Lockframe patch
   virtual void* LockFrame(cef_paint_element_type_t type);
 
-  virtual bool ReleaseFrame(cef_paint_element_type_t type);
+  virtual bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
   //
 
   bool IsHidden() const override;

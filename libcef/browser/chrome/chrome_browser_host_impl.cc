@@ -350,9 +350,9 @@ void* ChromeBrowserHostImpl::LockFrame(cef_paint_element_type_t type) {
     return nullptr;
 }
 
-bool ChromeBrowserHostImpl::ReleaseFrame(cef_paint_element_type_t type) {
+bool ChromeBrowserHostImpl::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
   if (platform_delegate_) {
-      return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->ReleaseFrame(type);
+      return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->ReleaseFrame(type, sequence_id);
   }
   return false;
 }
