@@ -1091,10 +1091,10 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
   virtual void* LockFrame(cef_paint_element_type_t type) = 0;
 
   ///
-  /// Releases the texture tied to the provided handle.
+  /// Releases the frame and its content tied to the sequence
   ///
   /*--cef(added=next)--*/
-  virtual bool ReleaseFrame(cef_paint_element_type_t type) = 0;
+  virtual bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id) = 0;
 #endif
 
   ///
