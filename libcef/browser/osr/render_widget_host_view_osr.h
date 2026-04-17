@@ -266,8 +266,8 @@ class CefRenderWidgetHostViewOSR
 // CFX: Lockframe patch
   void* LockFrame(cef_paint_element_type_t type);
 
-  bool ReleaseFrame(cef_paint_element_type_t type);
-//
+  bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
+  //
   void OnBeginFame(base::TimeTicks frame_time);
 
   bool IsPopupWidget() const {

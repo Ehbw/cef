@@ -4193,6 +4193,11 @@ typedef struct _cef_lock_frame_info_t {
   /// Rect's consisting of changed elements. 
   ///
   cef_rect_t dirty_rects[10];
+
+  ///
+  /// The frame sequence identifier. Used with ReleaseFrame
+  /// 
+  uint32_t frame_seq;
 } cef_lock_frame_info_t;
 #endif
 #ifdef __cplusplus

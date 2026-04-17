@@ -3,6 +3,7 @@
 
 #include <optional>
 #include <mutex>
+#include <unordered_map>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -22,14 +23,14 @@ struct FrameSlot {
 
   HANDLE last_handle = nullptr;
 
+  uint32_t current_seq = 0;
+  uint32_t sequence = 0;
+
+  std::unordered_map<uint32_t, mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>> callbacks;
+
   // This runner can be re-used.
   scoped_refptr<base::SequencedTaskRunner> runner;
 
-  // Callback for the current frame.
-  mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> current_callback;
-  // Callback for the previous frame.
-  mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> previous_callback;
-  // Callback for the future frame. null when the next frame isn't ready yet.
   mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> pending_callback;
 
   cef_lock_frame_info_t last_info = {sizeof(cef_lock_frame_info_t)};
@@ -45,21 +46,19 @@ struct FrameSlot {
         return; 
       }
 
-      if (current_callback) {
+      for (auto& [seq, cb] : callbacks) {
+        if (cb) {
           runner->PostTask(
               FROM_HERE,
-              base::BindOnce([](decltype(current_callback) c) { 
-                  c->Done(); 
-              }, std::move(current_callback)));
+              base::BindOnce(
+                  [](mojo::Remote<
+                      viz::mojom::FrameSinkVideoConsumerFrameCallbacks> c) {
+                    c->Done();
+                  },
+                  std::move(cb)));
+        }
       }
-
-      if (previous_callback) {
-          runner->PostTask(
-              FROM_HERE,
-              base::BindOnce([](decltype(previous_callback) c) { 
-                  c->Done(); 
-              }, std::move(previous_callback)));
-      }
+      callbacks.clear();
 
       if (pending_callback) {
           runner->PostTask(
@@ -102,7 +101,7 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
  
   // CFX: Lockframe patch
   void* LockFrame(cef_paint_element_type_t type);
-  bool ReleaseFrame(cef_paint_element_type_t type);
+  bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
   //
 
  private:

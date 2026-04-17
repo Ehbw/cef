@@ -1648,9 +1648,9 @@ void* CefRenderWidgetHostViewOSR::LockFrame(cef_paint_element_type_t type) {
   return nullptr;
 }
 
-bool CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type) {
+bool CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
   if (video_consumer_) {
-    return video_consumer_->ReleaseFrame(type);
+    return video_consumer_->ReleaseFrame(type, sequence_id);
   }
   return false;
 }

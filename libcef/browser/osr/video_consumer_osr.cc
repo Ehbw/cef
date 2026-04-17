@@ -86,16 +86,19 @@ void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
   }
 
   auto& slot = slots_[type];
-  if (!slot.pending.is_null())
-  {
+  if (!slot.pending.is_null()) {
     slot.current = std::move(slot.pending);
     slot.pending = gfx::GpuMemoryBufferHandle();
-    slot.current_callback = std::move(slot.pending_callback);
+
+    if (slot.pending_callback) {
+      uint32_t seq = ++slot.sequence;
+      slot.callbacks[seq] = std::move(slot.pending_callback);
+      slot.current_seq = seq;
+    }
     slot.pending_callback.reset();
   }
 
-  if (slot.current.is_null())
-  {
+  if (slot.current.is_null()) {
     return nullptr;
   }
 
@@ -105,10 +108,11 @@ void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
 
   slot.last_info.paint_type = type;
   slot.last_info.shared_handle = slot.current.dxgi_handle().buffer_handle();
+  slot.last_info.frame_seq = slot.sequence;
   return &slot.last_info;
 }
 
-bool CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type ) {
+bool CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
     if (type < PET_VIEW || type > PET_POPUP) {
         return false;
     }
@@ -118,20 +122,17 @@ bool CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type ) {
 
     {
       std::scoped_lock _(frame_mutex_);
-
       FrameSlot& slot = slots_[type];
+
       if (!slot.runner) {
         return false;
       }
+      runner = slot.runner;
 
-      if (slot.previous_callback) {
-        to_release = std::move(slot.previous_callback);
-        runner = slot.runner;
-      }
-
-      if (slot.current_callback) {
-        slot.previous_callback = std::move(slot.current_callback);
-        slot.current_callback.reset();
+      auto it = slot.callbacks.find(sequence_id);
+      if (it != slot.callbacks.end()) {
+        to_release = std::move(it->second);
+        slot.callbacks.erase(it);
       }
     }
 
@@ -144,7 +145,7 @@ bool CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type ) {
               std::move(to_release)));
     }
 
-    return true;
+    return to_release.is_bound();
 }
 
 // Frame size values are as follows:
@@ -161,7 +162,9 @@ void CefVideoConsumerOSR::OnFrameCaptured(
     const gfx::Rect& content_rect,
     mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
         callbacks) {
-  ScopedVideoFrameDone scoped_done(std::move(callbacks));
+  // CFX: Don't use RAII handler to release callback
+  // We want to control this entirely ourselves.
+  //ScopedVideoFrameDone scoped_done(std::move(callbacks));
 
   media::VideoFrameMetadata metadata = info->metadata;
   gfx::Rect damage_rect;
