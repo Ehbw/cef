@@ -1,0 +1,33 @@
+diff --git chrome/browser/ui/accelerator_table.cc chrome/browser/ui/accelerator_table.cc
+index 98f6531c2678d..9d6306616f5be 100644
+--- chrome/browser/ui/accelerator_table.cc
++++ chrome/browser/ui/accelerator_table.cc
+@@ -126,13 +126,14 @@ const AcceleratorMapping kAcceleratorMap[] = {
+ #endif  // BUILDFLAG(IS_LINUX)
+     {ui::VKEY_B, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
+      IDC_SHOW_BOOKMARK_BAR},
++#if 0 // CFX: Disable zoom keybindings, these didn't work in older versions and we don't want them now
+     {ui::VKEY_OEM_MINUS, ui::EF_PLATFORM_ACCELERATOR, IDC_ZOOM_MINUS},
+     {ui::VKEY_SUBTRACT, ui::EF_PLATFORM_ACCELERATOR, IDC_ZOOM_MINUS},
+     {ui::VKEY_0, ui::EF_PLATFORM_ACCELERATOR, IDC_ZOOM_NORMAL},
+     {ui::VKEY_NUMPAD0, ui::EF_PLATFORM_ACCELERATOR, IDC_ZOOM_NORMAL},
+     {ui::VKEY_OEM_PLUS, ui::EF_PLATFORM_ACCELERATOR, IDC_ZOOM_PLUS},
+     {ui::VKEY_ADD, ui::EF_PLATFORM_ACCELERATOR, IDC_ZOOM_PLUS},
+-
++#endif
+     {ui::VKEY_F1, ui::EF_NONE, IDC_HELP_PAGE_VIA_KEYBOARD},
+     {ui::VKEY_F3, ui::EF_NONE, IDC_FIND_NEXT},
+     {ui::VKEY_F3, ui::EF_SHIFT_DOWN, IDC_FIND_PREVIOUS},
+diff --git content/browser/web_contents/web_contents_impl.cc content/browser/web_contents/web_contents_impl.cc
+index dc9e636c1a64e..6ce822fe04db1 100644
+--- content/browser/web_contents/web_contents_impl.cc
++++ content/browser/web_contents/web_contents_impl.cc
+@@ -4514,7 +4524,7 @@ bool WebContentsImpl::HandleKeyboardEvent(
+ bool WebContentsImpl::HandleWheelEvent(const blink::WebMouseWheelEvent& event) {
+   OPTIONAL_TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("content.verbose"),
+                         "WebContentsImpl::HandleWheelEvent");
+-#if !BUILDFLAG(IS_MAC)
++#if 0 // CFX: Disable zoom scroll behaviour for CEF, we don't want this now.
+   // On platforms other than Mac, control+mousewheel may change zoom. On Mac,
+   // this isn't done for two reasons:
+   //   -the OS already has a gesture to do this through pinch-zoom
