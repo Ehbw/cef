@@ -1,0 +1,17 @@
+diff --git third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index 57a5afa3c5901..5f7078f59882e 100644
+--- third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -6586,6 +6586,12 @@ void WebGLRenderingContextBase::TexParameter(GLenum target,
+         }
+         break;
+       }
++
++      // CFX: add CFX_BIND_GAME_VIEW option to bind the game texture to glTexture
++      if ((is_float && paramf == 0x47d87380) || (!is_float && parami == 0x47d87380)) {
++        break;
++      }
++
+       if ((is_float && paramf != GL_CLAMP_TO_EDGE &&
+            paramf != GL_MIRRORED_REPEAT && paramf != GL_REPEAT) ||
+           (!is_float && parami != GL_CLAMP_TO_EDGE &&
