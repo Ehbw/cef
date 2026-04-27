@@ -59,10 +59,10 @@ class CefBrowserPlatformDelegateOsr
   bool IsWindowless() const override;
   void WasHidden(bool hidden) override;
 
-  // CFX: Lockframe patch
+  // CFX: OSR patches
   virtual void* LockFrame(cef_paint_element_type_t type);
 
-  virtual bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
+  virtual void ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
   //
 
   bool IsHidden() const override;

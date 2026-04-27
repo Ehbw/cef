@@ -375,6 +375,7 @@ bool CefRenderWidgetHostViewOSR::IsSurfaceAvailableForCopy() {
 
 void CefRenderWidgetHostViewOSR::ShowWithVisibility(
     content::PageVisibilityState) {
+  LOG(ERROR) << "OSR ShowWithVisibility() called is_showing_=" << is_showing_;
   if (is_showing_) {
     return;
   }
@@ -426,6 +427,7 @@ void CefRenderWidgetHostViewOSR::ShowWithVisibility(
 }
 
 void CefRenderWidgetHostViewOSR::Hide() {
+  LOG(ERROR) << "OSR Hide() called is_showing_=" << is_showing_;
   if (!is_showing_) {
     return;
   }
@@ -1648,11 +1650,10 @@ void* CefRenderWidgetHostViewOSR::LockFrame(cef_paint_element_type_t type) {
   return nullptr;
 }
 
-bool CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
+void CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
   if (video_consumer_) {
     return video_consumer_->ReleaseFrame(type, sequence_id);
   }
-  return false;
 }
 
 void CefRenderWidgetHostViewOSR::OnAcceleratedPaint(

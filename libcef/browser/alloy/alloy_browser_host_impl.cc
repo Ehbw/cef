@@ -351,11 +351,11 @@ void* AlloyBrowserHostImpl::LockFrame(cef_paint_element_type_t type) {
     return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->LockFrame(type);
 }
 
-bool AlloyBrowserHostImpl::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
+void AlloyBrowserHostImpl::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
     if (!platform_delegate_) {
-        return false;
+        return;
     }
-    return static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->ReleaseFrame(type, sequence_id);
+    static_cast<CefBrowserPlatformDelegateOsr*>(platform_delegate_.get())->ReleaseFrame(type, sequence_id);
 }
 
 bool AlloyBrowserHostImpl::IsWindowRenderingDisabled() {
