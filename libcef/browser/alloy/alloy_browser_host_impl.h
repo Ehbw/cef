@@ -165,11 +165,10 @@ class AlloyBrowserHostImpl : public CefBrowserHostBase,
   void ExecuteChromeCommand(int command_id,
                             cef_window_open_disposition_t disposition) override;
 
-  // CFX: Lockframe patch
-
+  // CFX: OSR patches
   void* LockFrame(cef_paint_element_type_t type) override;
 
-  bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id) override;
+  void ReleaseFrame(cef_paint_element_type_t type, int sequence_id) override;
   //
 
   // CefBrowserHostBase methods:

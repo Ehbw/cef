@@ -42,6 +42,9 @@ CefVideoConsumerOSR::CefVideoConsumerOSR(CefRenderWidgetHostViewOSR* view,
 
   SizeChanged(view_->SizeInPixels());
   SetActive(true);
+
+  // CFX: Watchdog so we can revive the video consumer in the case that we freeze.
+  watchdog_.Start(FROM_HERE, base::Seconds(5), base::BindRepeating(&CefVideoConsumerOSR::Watchdog, base::Unretained(this)));
 }
 
 CefVideoConsumerOSR::~CefVideoConsumerOSR() = default;
@@ -78,56 +81,73 @@ void CefVideoConsumerOSR::RequestRefreshFrame(
   video_capturer_->RequestRefreshFrame();
 }
 
-
 void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
-  std::scoped_lock _(frame_mutex_);
   if (type < PET_VIEW || type > PET_POPUP) {
     return nullptr;
   }
 
-  auto& slot = slots_[type];
-  if (!slot.pending.is_null()) {
-    slot.current = std::move(slot.pending);
-    slot.pending = gfx::GpuMemoryBufferHandle();
+  std::vector<mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>> to_release;
+  void* frameInfo = nullptr;
 
-    if (slot.pending_callback) {
-      uint32_t seq = ++slot.sequence;
-      slot.callbacks[seq] = std::move(slot.pending_callback);
-      slot.current_seq = seq;
+  {
+    std::scoped_lock _(frame_mutex_);
+    auto& slot = slots_[type];
+    if (!slot.pending.is_null()) {
+      slot.current = std::move(slot.pending);
+      slot.pending = gfx::GpuMemoryBufferHandle();
+
+      if (slot.pending_callback) {
+        uint32_t seq = ++slot.sequence;
+
+        // If we have too many frames at once we need to begin cleaning some up
+        // before we freeze
+        while (slot.callbacks.size() >= FrameSlot::kMaxInflightFrames) {
+          LOG(ERROR) << "Too many pending frames";
+          auto oldest = std::min_element(
+              slot.callbacks.begin(), slot.callbacks.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+          if (oldest != slot.callbacks.end()) {
+            if (oldest->second) {
+              to_release.push_back(std::move(oldest->second));
+            }
+            slot.callbacks.erase(oldest);
+          }
+        }
+
+        slot.callbacks[seq] = std::move(slot.pending_callback);
+        slot.current_seq = seq;
+      }
+      slot.pending_callback.reset();
     }
-    slot.pending_callback.reset();
+
+    if (!slot.current.is_null()) {
+      slot.last_info.dirty_rect_count = slot.dirty_rects_count;
+      memcpy(slot.last_info.dirty_rects, slot.dirty_rects,
+             sizeof(cef_rect_t) * slot.dirty_rects_count);
+      slot.ClearRects();
+      slot.last_info.paint_type = type;
+      slot.last_info.shared_handle = slot.current.dxgi_handle().buffer_handle();
+      slot.last_info.frame_seq = slot.sequence;
+      frameInfo = &slot.last_info;
+    }
   }
 
-  if (slot.current.is_null()) {
-    return nullptr;
+  for (auto& cb : to_release) {
+    cb->Done();
   }
-
-  slot.last_info.dirty_rect_count = slot.dirty_rects_count;
-  memcpy(slot.last_info.dirty_rects, slot.dirty_rects, sizeof(cef_rect_t) * slot.dirty_rects_count);
-  slot.ClearRects();
-
-  slot.last_info.paint_type = type;
-  slot.last_info.shared_handle = slot.current.dxgi_handle().buffer_handle();
-  slot.last_info.frame_seq = slot.sequence;
-  return &slot.last_info;
+  return frameInfo;
 }
 
-bool CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
+void CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
     if (type < PET_VIEW || type > PET_POPUP) {
-        return false;
+        return;
     }
 
     mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> to_release;
-    scoped_refptr<base::SequencedTaskRunner> runner;
 
     {
       std::scoped_lock _(frame_mutex_);
       FrameSlot& slot = slots_[type];
-
-      if (!slot.runner) {
-        return false;
-      }
-      runner = slot.runner;
 
       auto it = slot.callbacks.find(sequence_id);
       if (it != slot.callbacks.end()) {
@@ -136,16 +156,46 @@ bool CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequen
       }
     }
 
-    if (to_release && runner) {
-      runner->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              [](mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
-                     c) { c->Done(); },
-              std::move(to_release)));
+    if (to_release) {
+        to_release->Done();
     }
+}
 
-    return to_release.is_bound();
+void CefVideoConsumerOSR::Watchdog()
+{
+  std::vector<mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>>
+      to_release;
+  bool needs_refresh = false;
+
+  auto now = base::TimeTicks::Now();
+  {
+    std::scoped_lock _(frame_mutex_);
+    for (int type = PET_VIEW; type <= PET_POPUP; type++) {
+      auto& slot = slots_[type];
+
+      bool stalled = !slot.last_watchdog_flush_time.is_null() && (now - slot.last_watchdog_flush_time) > base::Seconds(2);
+      if (!stalled) {
+        slot.watchdog_last_pending_size = slot.callbacks.size();
+        continue;
+      }
+
+      needs_refresh = true;
+      for (auto& [seq, cb] : slot.callbacks) {
+        to_release.push_back(std::move(cb));
+      }
+
+      slot.callbacks.clear();
+      slot.watchdog_last_pending_size = slot.callbacks.size();
+    }
+  }
+
+  for (auto& cb : to_release) {
+    cb->Done();
+  }
+
+  if (needs_refresh) {
+    RequestRefreshFrame(std::nullopt);
+  }
 }
 
 // Frame size values are as follows:
@@ -249,18 +299,10 @@ void CefVideoConsumerOSR::OnFrameCaptured(
         auto& slot = consumer->slots_[type];
         slot.pending = std::move(gmb_handle);
 
-        // if we have an existing pending callback.
-        // we can assume that this frame didn't get used.
-        // so we can safely recycle it.
-        if (slot.pending_callback) {
-          slot.pending_callback->Done();
-          slot.pending_callback.reset();
-        }
-
+        slot.last_watchdog_flush_time = base::TimeTicks::Now();
         slot.last_info.width = info->coded_size.width();
         slot.last_info.height = info->coded_size.height();
         slot.pending_callback.Bind(std::move(callbacks));
-        slot.runner = base::SequencedTaskRunner::GetCurrentDefault();
 
         gfx::Rect rect_in_pixels(0, 0, info->coded_size.width(),
                                  info->coded_size.height());
@@ -280,7 +322,7 @@ void CefVideoConsumerOSR::OnFrameCaptured(
         if (parent) {
           CefVideoConsumerOSR* consumer = parent->GetVideoConsumer();
           if (consumer) {
-            std::scoped_lock lock(frame_mutex_, consumer->frame_mutex_);
+            std::scoped_lock _(consumer->frame_mutex_);
             updateFrameInfo(consumer, PET_POPUP);
           }
         }
@@ -298,6 +340,35 @@ void CefVideoConsumerOSR::OnFrameCaptured(
     cef_accelerated_paint_info_t paint_info = {
         sizeof(cef_accelerated_paint_info_t)};
     view_->OnAcceleratedPaint(damage_rect, info->coded_size, paint_info);
+
+    mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> to_release;
+
+    // If we don't use the frame discard it quickly before we allow it to pile up.
+    if (view_->IsPopupWidget()) {
+      CefRenderWidgetHostViewOSR* parent = view_->GetParentHostView();
+      if (parent) {
+        CefVideoConsumerOSR* consumer = parent->GetVideoConsumer();
+        if (consumer) {
+          std::scoped_lock _(consumer->frame_mutex_);
+          auto& slot = consumer->slots_[PET_POPUP];
+          if (slot.pending_callback) {
+            to_release = std::move(slot.pending_callback);
+            slot.pending_callback.reset();
+          }
+        }
+      }
+    } else {
+      std::scoped_lock _(frame_mutex_);
+      auto& slot = slots_[PET_VIEW];
+      if (slot.pending_callback) {
+        to_release = std::move(slot.pending_callback);
+        slot.pending_callback.reset();
+      }
+    }
+
+    if (to_release) {
+      to_release->Done();
+    }
 
 #elif BUILDFLAG(IS_APPLE)
     auto& gmb_handle = data->get_gpu_memory_buffer_handle();

@@ -269,12 +269,11 @@ void* CefBrowserPlatformDelegateOsr::LockFrame(cef_paint_element_type_t type) {
   return nullptr;
 }
 
-bool CefBrowserPlatformDelegateOsr::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
+void CefBrowserPlatformDelegateOsr::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
   CefRenderWidgetHostViewOSR* view = GetOSRHostView();
   if (view) {
     return view->ReleaseFrame(type, sequence_id);
   }
-  return false;
 }
 
 void CefBrowserPlatformDelegateOsr::NotifyScreenInfoChanged() {

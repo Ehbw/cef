@@ -28,46 +28,33 @@ struct FrameSlot {
 
   std::unordered_map<uint32_t, mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>> callbacks;
 
-  // This runner can be re-used.
-  scoped_refptr<base::SequencedTaskRunner> runner;
-
   mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> pending_callback;
 
   cef_lock_frame_info_t last_info = {sizeof(cef_lock_frame_info_t)};
 
   // Keep in sync with cef_lock_frame_info_t::dirty_rects in cef_types.h
   static constexpr int kMaxDirtyRects = 10;
+  // Chromium has a max of 11 inflight frames, we leave two spare so chromium doesn't freak out if we have used all frames.
+  static constexpr int kMaxInflightFrames = 9;
+
+  // Watchdog to revive OSR if it somehow hangs.
+  size_t watchdog_last_pending_size = 0;
+  base::TimeTicks last_watchdog_flush_time;
 
   int dirty_rects_count = 0;
   cef_rect_t dirty_rects[kMaxDirtyRects]; 
 
   ~FrameSlot() { 
-      if (!runner) {
-        return; 
-      }
-
       for (auto& [seq, cb] : callbacks) {
         if (cb) {
-          runner->PostTask(
-              FROM_HERE,
-              base::BindOnce(
-                  [](mojo::Remote<
-                      viz::mojom::FrameSinkVideoConsumerFrameCallbacks> c) {
-                    c->Done();
-                  },
-                  std::move(cb)));
+          cb->Done();
         }
       }
       callbacks.clear();
 
       if (pending_callback) {
-          runner->PostTask(
-              FROM_HERE,
-              base::BindOnce([](decltype(pending_callback) c) { 
-                  c->Done(); 
-              }, std::move(pending_callback)));
+        pending_callback->Done();
       }
-
       // GpuMemoryBufferHandle dtor releases the DXGI handles.
   }
 
@@ -101,7 +88,7 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
  
   // CFX: Lockframe patch
   void* LockFrame(cef_paint_element_type_t type);
-  bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
+  void ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
   //
 
  private:
@@ -126,7 +113,11 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
   gfx::Size size_in_pixels_;
   std::optional<gfx::Rect> bounds_in_pixels_;
 
+  void Watchdog();
+
   // CFX: Lockframe patch
+  base::RepeatingTimer watchdog_;
+
   std::mutex frame_mutex_;
   FrameSlot slots_[2];
 };

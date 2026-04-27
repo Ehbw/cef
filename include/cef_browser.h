@@ -1094,7 +1094,7 @@ class CefBrowserHost : public virtual CefBaseRefCounted {
   /// Releases the frame and its content tied to the sequence
   ///
   /*--cef(added=next)--*/
-  virtual bool ReleaseFrame(cef_paint_element_type_t type, int sequence_id) = 0;
+  virtual void ReleaseFrame(cef_paint_element_type_t type, int sequence_id) = 0;
 #endif
 
   ///
