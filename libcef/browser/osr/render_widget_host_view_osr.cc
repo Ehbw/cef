@@ -1652,8 +1652,32 @@ void* CefRenderWidgetHostViewOSR::LockFrame(cef_paint_element_type_t type) {
 
 void CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
   if (video_consumer_) {
+    if (!CEF_CURRENTLY_ON_UIT()) {
+      CEF_POST_TASK(
+          CEF_UIT,
+          base::BindOnce(&CefRenderWidgetHostViewOSR::ReleaseFrame,
+                         weak_ptr_factory_.GetWeakPtr(), type, sequence_id));
+      return;
+    }
+
     return video_consumer_->ReleaseFrame(type, sequence_id);
   }
+}
+
+void CefRenderWidgetHostViewOSR::OnFrameCaptured() {
+  TRACE_EVENT0("cef", "CefRenderWidgetHostViewOSR::OnFrameCaptured");
+
+  // Workaround for https://github.com/chromiumembedded/cef/issues/2817
+  if (!is_showing_) {
+    return;
+  }
+
+  CefRefPtr<CefRenderHandler> handler =
+      browser_impl_->client()->GetRenderHandler();
+  DCHECK(handler);
+
+  handler->OnFrameCaptured(browser_impl_.get(),
+                              IsPopupWidget() ? PET_POPUP : PET_VIEW);
 }
 
 void CefRenderWidgetHostViewOSR::OnAcceleratedPaint(

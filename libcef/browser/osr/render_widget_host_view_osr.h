@@ -267,6 +267,8 @@ class CefRenderWidgetHostViewOSR
   void* LockFrame(cef_paint_element_type_t type);
 
   void ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
+
+  void OnFrameCaptured();
 //
   void OnBeginFame(base::TimeTicks frame_time);
 

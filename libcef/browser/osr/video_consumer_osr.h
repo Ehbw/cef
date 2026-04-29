@@ -35,11 +35,12 @@ struct FrameSlot {
   // Keep in sync with cef_lock_frame_info_t::dirty_rects in cef_types.h
   static constexpr int kMaxDirtyRects = 10;
   // Chromium has a max of 11 inflight frames, we leave two spare so chromium doesn't freak out if we have used all frames.
-  static constexpr int kMaxInflightFrames = 9;
+  static constexpr int kMaxInflightFrames = 8;
 
-  // Watchdog to revive OSR if it somehow hangs.
-  size_t watchdog_last_pending_size = 0;
-  base::TimeTicks last_watchdog_flush_time;
+  // Used with watchdog to detect when a frame has stopped being alive, only for PET_VIEW
+  base::TimeTicks last_frame_update_time;
+
+  bool had_backlog;
 
   int dirty_rects_count = 0;
   cef_rect_t dirty_rects[kMaxDirtyRects]; 
