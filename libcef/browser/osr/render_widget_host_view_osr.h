@@ -268,8 +268,8 @@ class CefRenderWidgetHostViewOSR
 
   void ReleaseFrame(cef_paint_element_type_t type, int sequence_id);
 
-  void OnFrameCaptured();
-//
+  void OnFrameCaptured(const gfx::Size& pixel_size);
+  //
   void OnBeginFame(base::TimeTicks frame_time);
 
   bool IsPopupWidget() const {

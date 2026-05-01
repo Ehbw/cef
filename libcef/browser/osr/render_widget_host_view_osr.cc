@@ -1664,7 +1664,7 @@ void CefRenderWidgetHostViewOSR::ReleaseFrame(cef_paint_element_type_t type, int
   }
 }
 
-void CefRenderWidgetHostViewOSR::OnFrameCaptured() {
+void CefRenderWidgetHostViewOSR::OnFrameCaptured(const gfx::Size& pixel_size) {
   TRACE_EVENT0("cef", "CefRenderWidgetHostViewOSR::OnFrameCaptured");
 
   // Workaround for https://github.com/chromiumembedded/cef/issues/2817
@@ -1678,6 +1678,16 @@ void CefRenderWidgetHostViewOSR::OnFrameCaptured() {
 
   handler->OnFrameCaptured(browser_impl_.get(),
                               IsPopupWidget() ? PET_POPUP : PET_VIEW);
+
+  // Release the resize hold when we reach the desired size.
+  if (hold_resize_) {
+    DCHECK_GT(cached_scale_factor_, 0);
+    gfx::Size expected_size =
+        gfx::ScaleToCeiledSize(GetViewBounds().size(), cached_scale_factor_);
+    if (pixel_size == expected_size) {
+      ReleaseResizeHold();
+    }
+  }
 }
 
 void CefRenderWidgetHostViewOSR::OnAcceleratedPaint(
