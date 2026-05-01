@@ -323,7 +323,7 @@ void CefVideoConsumerOSR::OnFrameCaptured(
     // So we can continue M103 behaviour of opening the handle on chromes thread and passing it to the game for rendering
     // Ensuring we don't have any overhead from blocking for OpenSharedResource1/OpenShareHandle which may impact performance
     // LockFrame/ReleaseFrame still does a majority of the work for rendering.
-    view_->OnFrameCaptured();
+    view_->OnFrameCaptured(info->coded_size);
 
     mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> to_release;
 
