@@ -98,7 +98,6 @@ void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
 
       if (slot.pending_callback) {
         if (slot.callbacks.size() >= FrameSlot::kMaxInflightFrames) {
-          LOG(ERROR) << "Too many pending frames, discarding frame until we can clear the backlog";
           slot.had_backlog = true;
           return nullptr;
         }
@@ -156,7 +155,6 @@ void CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequen
     }
 
     if (needs_refresh) {
-      LOG(ERROR) << "Frame backlog cleared, requesting refresh frame"; 
       RequestRefreshFrame(std::nullopt);
     }
 }

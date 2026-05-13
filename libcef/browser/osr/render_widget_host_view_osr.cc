@@ -375,7 +375,6 @@ bool CefRenderWidgetHostViewOSR::IsSurfaceAvailableForCopy() {
 
 void CefRenderWidgetHostViewOSR::ShowWithVisibility(
     content::PageVisibilityState) {
-  LOG(ERROR) << "OSR ShowWithVisibility() called is_showing_=" << is_showing_;
   if (is_showing_) {
     return;
   }
@@ -427,7 +426,6 @@ void CefRenderWidgetHostViewOSR::ShowWithVisibility(
 }
 
 void CefRenderWidgetHostViewOSR::Hide() {
-  LOG(ERROR) << "OSR Hide() called is_showing_=" << is_showing_;
   if (!is_showing_) {
     return;
   }
