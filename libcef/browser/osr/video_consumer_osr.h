@@ -16,6 +16,12 @@ class CefRenderWidgetHostViewOSR;
 
 // CFX: LockFrame implementation
 struct FrameSlot {
+  // Keep in sync with cef_lock_frame_info_t::dirty_rects in cef_types.h
+  static constexpr int kMaxDirtyRects = 10;
+  // Chromium has a max of 11 inflight frames, we leave two spare so chromium
+  // doesn't freak out if we have used all frames.
+  static constexpr int kMaxInflightFrames = 8;
+
   // Current Frame
   gfx::GpuMemoryBufferHandle current;
   // Future Frame
@@ -27,23 +33,28 @@ struct FrameSlot {
   uint32_t sequence = 0;
 
   std::unordered_map<uint32_t, mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>> callbacks;
-
   mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> pending_callback;
 
-  cef_lock_frame_info_t last_info = {sizeof(cef_lock_frame_info_t)};
+  std::array<cef_lock_frame_info_t, kMaxInflightFrames> frame_infos;
+  std::unordered_map<uint32_t, uint32_t> frame_sequences;
+  uint32_t next_pool_index = 0; 
 
-  // Keep in sync with cef_lock_frame_info_t::dirty_rects in cef_types.h
-  static constexpr int kMaxDirtyRects = 10;
-  // Chromium has a max of 11 inflight frames, we leave two spare so chromium doesn't freak out if we have used all frames.
-  static constexpr int kMaxInflightFrames = 8;
-
-  // Used with watchdog to detect when a frame has stopped being alive, only for PET_VIEW
-  base::TimeTicks last_frame_update_time;
+  // Frame coded size information for the frame being processed
+  uint32_t current_frame_height;
+  uint32_t current_frame_width;
 
   bool had_backlog;
 
   int dirty_rects_count = 0;
   cef_rect_t dirty_rects[kMaxDirtyRects]; 
+
+  FrameSlot()
+  { 
+    for (auto& info : frame_infos)
+    {
+      info.size = sizeof(cef_lock_frame_info_t);
+    }
+  }
 
   ~FrameSlot() { 
       for (auto& [seq, cb] : callbacks) {
@@ -57,6 +68,14 @@ struct FrameSlot {
         pending_callback->Done();
       }
       // GpuMemoryBufferHandle dtor releases the DXGI handles.
+  }
+
+  cef_lock_frame_info_t* GetFrameInfo(uint32_t seq) {
+    uint32_t pool_idx = next_pool_index;
+    next_pool_index = (next_pool_index + 1) % kMaxInflightFrames;
+
+    frame_sequences[seq] = pool_idx;
+    return &frame_infos[pool_idx];
   }
 
   void PushRect(const gfx::Rect& rect) {
@@ -113,11 +132,6 @@ class CefVideoConsumerOSR : public viz::mojom::FrameSinkVideoConsumer {
 
   gfx::Size size_in_pixels_;
   std::optional<gfx::Rect> bounds_in_pixels_;
-
-  void Watchdog();
-
-  // CFX: Lockframe patch
-  base::RepeatingTimer watchdog_;
 
   std::mutex frame_mutex_;
   FrameSlot slots_[2];

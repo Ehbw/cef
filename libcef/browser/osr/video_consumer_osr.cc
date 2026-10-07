@@ -42,9 +42,6 @@ CefVideoConsumerOSR::CefVideoConsumerOSR(CefRenderWidgetHostViewOSR* view,
 
   SizeChanged(view_->SizeInPixels());
   SetActive(true);
-
-  // CFX: Watchdog so we can revive the video consumer in the case that we freeze.
-  watchdog_.Start(FROM_HERE, base::Seconds(5), base::BindRepeating(&CefVideoConsumerOSR::Watchdog, base::Unretained(this)));
 }
 
 CefVideoConsumerOSR::~CefVideoConsumerOSR() = default;
@@ -86,11 +83,8 @@ void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
     return nullptr;
   }
 
-  std::vector<mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>> to_release;
   void* frameInfo = nullptr;
-
   {
-    //std::scoped_lock _(frame_mutex_);
     auto& slot = slots_[type];
     if (!slot.pending.is_null()) {
       slot.current = std::move(slot.pending);
@@ -109,20 +103,21 @@ void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
     }
 
     if (!slot.current.is_null()) {
-      slot.last_info.dirty_rect_count = slot.dirty_rects_count;
-      memcpy(slot.last_info.dirty_rects, slot.dirty_rects,
-             sizeof(cef_rect_t) * slot.dirty_rects_count);
+      uint32_t seq = slot.current_seq;
+      cef_lock_frame_info_t* frame = slot.GetFrameInfo(seq);
+      frame->dirty_rect_count = slot.dirty_rects_count;
+      memcpy(frame->dirty_rects, slot.dirty_rects,
+              sizeof(cef_rect_t) * slot.dirty_rects_count);
       slot.ClearRects();
-      slot.last_info.paint_type = type;
-      slot.last_info.shared_handle = slot.current.dxgi_handle().buffer_handle();
-      slot.last_info.frame_seq = slot.sequence;
-      frameInfo = &slot.last_info;
+      frame->shared_handle = slot.current.dxgi_handle().buffer_handle();
+      frame->paint_type = type;
+      frame->frame_seq = seq;
+      frame->height = slot.current_frame_height;
+      frame->width = slot.current_frame_width;
+      frameInfo = frame;
     }
   }
 
-  for (auto& cb : to_release) {
-    cb->Done();
-  }
   return frameInfo;
 }
 
@@ -135,13 +130,14 @@ void CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequen
     bool needs_refresh = false;
 
     {
-      //std::scoped_lock _(frame_mutex_);
       FrameSlot& slot = slots_[type];
 
       auto it = slot.callbacks.find(sequence_id);
       if (it != slot.callbacks.end()) {
         to_release = std::move(it->second);
         slot.callbacks.erase(it);
+
+        slot.frame_sequences.erase(sequence_id);
 
         if (slot.had_backlog && slot.callbacks.size() < 2) {
           slot.had_backlog = false;
@@ -151,35 +147,14 @@ void CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequen
     }
 
     if (to_release) {
-        to_release->Done();
+      to_release->Done();
     }
 
+    // Force refresh if we dropped any frames. otherwise we risk showing stale data to the user
+    // if the UI updates are sparse
     if (needs_refresh) {
       RequestRefreshFrame(std::nullopt);
     }
-}
-
-void CefVideoConsumerOSR::Watchdog()
-{
-  bool needs_refresh = false;
-
-  auto now = base::TimeTicks::Now();
-  {
-   // std::scoped_lock _(frame_mutex_);
-    auto& slot = slots_[PET_VIEW];
-
-    bool stalled = !slot.last_frame_update_time.is_null() && (now - slot.last_frame_update_time) > base::Seconds(5);
-    if (!stalled) {
-      return;
-    }
-
-    needs_refresh = true;
-  }
-
-  if (needs_refresh) {
-    LOG(WARNING) << "No main view updates for 5 seconds, forcing frame update."; 
-    RequestRefreshFrame(std::nullopt);
-  }
 }
 
 // Frame size values are as follows:
@@ -283,9 +258,8 @@ void CefVideoConsumerOSR::OnFrameCaptured(
         auto& slot = consumer->slots_[type];
         slot.pending = std::move(gmb_handle);
 
-        slot.last_frame_update_time = base::TimeTicks::Now();
-        slot.last_info.width = info->coded_size.width();
-        slot.last_info.height = info->coded_size.height();
+        slot.current_frame_width = info->coded_size.width();
+        slot.current_frame_height = info->coded_size.height();
         slot.pending_callback.Bind(std::move(callbacks));
 
         gfx::Rect rect_in_pixels(0, 0, info->coded_size.width(),
@@ -316,11 +290,9 @@ void CefVideoConsumerOSR::OnFrameCaptured(
       }
     }
 
-    // Keep OnAcceleratedPaint callback while having LockFrame
-    // Doing so allows us to have a callback on chrome renders thread the moment the frame is ready
-    // So we can continue M103 behaviour of opening the handle on chromes thread and passing it to the game for rendering
-    // Ensuring we don't have any overhead from blocking for OpenSharedResource1/OpenShareHandle which may impact performance
-    // LockFrame/ReleaseFrame still does a majority of the work for rendering.
+    // CFX: Introduce OnFrameCaptured callback.
+    // Allows us to have a callback when the frame is prepared.
+    // Allowing us to lift the blocking of OpenSharedResource1/OpenShareHandle off of the Games Render thread (even if it can be insignificant at times).
     view_->OnFrameCaptured(info->coded_size);
 
     mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> to_release;
@@ -335,6 +307,7 @@ void CefVideoConsumerOSR::OnFrameCaptured(
           auto& slot = consumer->slots_[PET_POPUP];
           if (slot.pending_callback) {
             to_release = std::move(slot.pending_callback);
+            slot.pending = gfx::GpuMemoryBufferHandle();
             slot.pending_callback.reset();
           }
         }
@@ -344,6 +317,7 @@ void CefVideoConsumerOSR::OnFrameCaptured(
       auto& slot = slots_[PET_VIEW];
       if (slot.pending_callback) {
         to_release = std::move(slot.pending_callback);
+        slot.pending = gfx::GpuMemoryBufferHandle();
         slot.pending_callback.reset();
       }
     }
