@@ -4198,6 +4198,18 @@ typedef struct _cef_lock_frame_info_t {
   /// The frame sequence identifier. Used with ReleaseFrame
   /// 
   uint32_t frame_seq;
+
+  ///
+  /// The DXGI resource high token. 
+  /// Used in combination with token_low to create a unique identifier for caching
+  /// 
+  uint64_t token_high;
+
+  ///
+  /// The DXGI resource low token
+  /// Used in combination with token_high to create a unique identifier for caching
+  /// 
+  uint64_t token_low;
 } cef_lock_frame_info_t;
 #endif
 #ifdef __cplusplus

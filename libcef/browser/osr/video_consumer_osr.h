@@ -14,6 +14,7 @@
 
 class CefRenderWidgetHostViewOSR;
 
+
 // CFX: LockFrame implementation
 struct FrameSlot {
   // Keep in sync with cef_lock_frame_info_t::dirty_rects in cef_types.h
@@ -22,22 +23,23 @@ struct FrameSlot {
   // doesn't freak out if we have used all frames.
   static constexpr int kMaxInflightFrames = 8;
 
-  // Current Frame
-  gfx::GpuMemoryBufferHandle current;
+  struct InflightFrame
+  {
+    gfx::GpuMemoryBufferHandle handle;
+    mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> callbacks;
+    cef_lock_frame_info_t info{};
+    int width = 0;
+    int height = 0;
+  };
+
   // Future Frame
   gfx::GpuMemoryBufferHandle pending;
+  mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> pending_callback;
 
-  HANDLE last_handle = nullptr;
+  std::unordered_map<uint32_t, InflightFrame> inflight;
 
   uint32_t current_seq = 0;
   uint32_t sequence = 0;
-
-  std::unordered_map<uint32_t, mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>> callbacks;
-  mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> pending_callback;
-
-  std::array<cef_lock_frame_info_t, kMaxInflightFrames> frame_infos;
-  std::unordered_map<uint32_t, uint32_t> frame_sequences;
-  uint32_t next_pool_index = 0; 
 
   // Frame coded size information for the frame being processed
   uint32_t current_frame_height;
@@ -45,25 +47,15 @@ struct FrameSlot {
 
   bool had_backlog;
 
-  int dirty_rects_count = 0;
-  cef_rect_t dirty_rects[kMaxDirtyRects]; 
-
-  FrameSlot()
-  { 
-    for (auto& info : frame_infos)
-    {
-      info.size = sizeof(cef_lock_frame_info_t);
-    }
-  }
+    int dirty_rects_count = 0;
+  cef_rect_t dirty_rects[kMaxDirtyRects];
 
   ~FrameSlot() { 
-      for (auto& [seq, cb] : callbacks) {
-        if (cb) {
-          cb->Done();
-        }
+      for (auto& [seq, frame] : inflight) {
+          if (frame.callbacks) {
+              frame.callbacks->Done();
+          }
       }
-      callbacks.clear();
-
       if (pending_callback) {
         pending_callback->Done();
       }
@@ -71,11 +63,11 @@ struct FrameSlot {
   }
 
   cef_lock_frame_info_t* GetFrameInfo(uint32_t seq) {
-    uint32_t pool_idx = next_pool_index;
-    next_pool_index = (next_pool_index + 1) % kMaxInflightFrames;
-
-    frame_sequences[seq] = pool_idx;
-    return &frame_infos[pool_idx];
+    if (auto it = inflight.find(seq); it != inflight.end()) {
+      InflightFrame& frame = it->second;
+      return &frame.info;
+    }
+    return nullptr;
   }
 
   void PushRect(const gfx::Rect& rect) {

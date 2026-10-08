@@ -82,76 +82,87 @@ void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
   if (type < PET_VIEW || type > PET_POPUP) {
     return nullptr;
   }
+  CHECK(CEF_CURRENTLY_ON_UIT());
 
-  void* frameInfo = nullptr;
-  {
-    auto& slot = slots_[type];
-    if (!slot.pending.is_null()) {
-      slot.current = std::move(slot.pending);
-      slot.pending = gfx::GpuMemoryBufferHandle();
-
-      if (slot.pending_callback) {
-        if (slot.callbacks.size() >= FrameSlot::kMaxInflightFrames) {
-          slot.had_backlog = true;
-          return nullptr;
-        }
-        uint32_t seq = ++slot.sequence;
-        slot.callbacks[seq] = std::move(slot.pending_callback);
-        slot.current_seq = seq;
-      }
-      slot.pending_callback.reset();
-    }
-
-    if (!slot.current.is_null()) {
-      uint32_t seq = slot.current_seq;
-      cef_lock_frame_info_t* frame = slot.GetFrameInfo(seq);
-      frame->dirty_rect_count = slot.dirty_rects_count;
-      memcpy(frame->dirty_rects, slot.dirty_rects,
-              sizeof(cef_rect_t) * slot.dirty_rects_count);
-      slot.ClearRects();
-      frame->shared_handle = slot.current.dxgi_handle().buffer_handle();
-      frame->paint_type = type;
-      frame->frame_seq = seq;
-      frame->height = slot.current_frame_height;
-      frame->width = slot.current_frame_width;
-      frameInfo = frame;
-    }
+  auto& slot = slots_[type];
+  // No new frames yet.
+  if (slot.pending.is_null() || !slot.pending_callback) {
+    return nullptr;
   }
 
-  return frameInfo;
+  // Too many frames have built up. Don't let any more be pushed
+  if (slot.inflight.size() >= FrameSlot::kMaxInflightFrames) {
+    slot.had_backlog = true;
+    return nullptr;
+  }
+
+  uint32_t seq = ++slot.sequence;
+  FrameSlot::InflightFrame& frame = slot.inflight[seq];
+  frame.handle = std::move(slot.pending);
+  frame.callbacks = std::move(slot.pending_callback);
+  frame.width = slot.current_frame_width;
+  frame.height = slot.current_frame_height;
+  slot.pending = gfx::GpuMemoryBufferHandle();
+  slot.current_seq = seq;
+  
+  auto it = slot.inflight.find(slot.current_seq);
+  // Already released?
+  if (it == slot.inflight.end()) {
+    return nullptr;
+  }
+    
+  cef_lock_frame_info_t* info = slot.GetFrameInfo(it->first);
+  info->dirty_rect_count = slot.dirty_rects_count;
+  memcpy(info->dirty_rects, slot.dirty_rects,
+         sizeof(cef_rect_t) * slot.dirty_rects_count);
+  slot.ClearRects();
+  info->shared_handle = it->second.handle.dxgi_handle().buffer_handle();
+  info->paint_type = type;
+  info->frame_seq = it->first;
+  info->width = it->second.width;
+  info->height = it->second.height;
+
+  const auto& token = it->second.handle.dxgi_handle().token().value();
+  info->token_high = token.GetHighForSerialization();
+  info->token_low = token.GetLowForSerialization();
+
+  return info;
 }
 
 void CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequence_id) {
     if (type < PET_VIEW || type > PET_POPUP) {
         return;
     }
+    CHECK(CEF_CURRENTLY_ON_UIT());
 
-    mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks> to_release;
+    FrameSlot::InflightFrame released;
     bool needs_refresh = false;
 
-    {
-      FrameSlot& slot = slots_[type];
+    FrameSlot& slot = slots_[type];
 
-      auto it = slot.callbacks.find(sequence_id);
-      if (it != slot.callbacks.end()) {
-        to_release = std::move(it->second);
-        slot.callbacks.erase(it);
-
-        slot.frame_sequences.erase(sequence_id);
-
-        if (slot.had_backlog && slot.callbacks.size() < 2) {
-          slot.had_backlog = false;
-          needs_refresh = true;
-        }
-      }
+    auto it = slot.inflight.find(sequence_id);
+    if (it == slot.inflight.end()) {
+        // Already released.
+        return;
     }
 
-    if (to_release) {
-      to_release->Done();
+    released = std::move(it->second);
+    slot.inflight.erase(it);
+
+    // Clear backlog flag and force UI refresh if the queue has been mostly cleared
+    if (slot.had_backlog && slot.inflight.size() < 2) {
+      slot.had_backlog = false;
+      needs_refresh = true;
     }
 
-    // Force refresh if we dropped any frames. otherwise we risk showing stale data to the user
-    // if the UI updates are sparse
+    if (released.callbacks) {
+      released.callbacks->Done();
+    }
+
+    // Force refresh if we dropped any frames.
+    // This could occur in the case where there is a burst of frame updates
+    // followed by no new frame updates after the backlog of frames has been rendered
+    // Leading to potentially stale UI data being rendered.
     if (needs_refresh) {
       RequestRefreshFrame(std::nullopt);
     }
@@ -280,12 +291,10 @@ void CefVideoConsumerOSR::OnFrameCaptured(
         if (parent) {
           CefVideoConsumerOSR* consumer = parent->GetVideoConsumer();
           if (consumer) {
-            //std::scoped_lock _(consumer->frame_mutex_);
             updateFrameInfo(consumer, PET_POPUP);
           }
         }
       } else {
-        //std::scoped_lock _(frame_mutex_);
         updateFrameInfo(this, PET_VIEW);
       }
     }
