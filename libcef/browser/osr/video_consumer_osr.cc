@@ -104,25 +104,21 @@ void* CefVideoConsumerOSR::LockFrame(cef_paint_element_type_t type) {
   frame.height = slot.current_frame_height;
   slot.pending = gfx::GpuMemoryBufferHandle();
   slot.current_seq = seq;
-  
-  auto it = slot.inflight.find(slot.current_seq);
-  // Already released?
-  if (it == slot.inflight.end()) {
-    return nullptr;
-  }
     
-  cef_lock_frame_info_t* info = slot.GetFrameInfo(it->first);
+  cef_lock_frame_info_t* info = slot.GetFrameInfo(seq);
+  info->size = sizeof(cef_lock_frame_info_t);
+
   info->dirty_rect_count = slot.dirty_rects_count;
   memcpy(info->dirty_rects, slot.dirty_rects,
          sizeof(cef_rect_t) * slot.dirty_rects_count);
   slot.ClearRects();
-  info->shared_handle = it->second.handle.dxgi_handle().buffer_handle();
+  info->shared_handle = frame.handle.dxgi_handle().buffer_handle();
   info->paint_type = type;
-  info->frame_seq = it->first;
-  info->width = it->second.width;
-  info->height = it->second.height;
+  info->frame_seq = seq;
+  info->width = frame.width;
+  info->height = frame.height;
 
-  const auto& token = it->second.handle.dxgi_handle().token().value();
+  const auto& token = frame.handle.dxgi_handle().token().value();
   info->token_high = token.GetHighForSerialization();
   info->token_low = token.GetLowForSerialization();
 
@@ -142,6 +138,7 @@ void CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequen
 
     auto it = slot.inflight.find(sequence_id);
     if (it == slot.inflight.end()) {
+        LOG(ERROR) << "Frame " << sequence_id << " was already released";
         // Already released.
         return;
     }
@@ -149,15 +146,15 @@ void CefVideoConsumerOSR::ReleaseFrame(cef_paint_element_type_t type, int sequen
     released = std::move(it->second);
     slot.inflight.erase(it);
 
+    CHECK(released.callbacks);
+    released.callbacks->Done();
+
     // Clear backlog flag and force UI refresh if the queue has been mostly cleared
     if (slot.had_backlog && slot.inflight.size() < 2) {
       slot.had_backlog = false;
       needs_refresh = true;
     }
 
-    if (released.callbacks) {
-      released.callbacks->Done();
-    }
 
     // Force refresh if we dropped any frames.
     // This could occur in the case where there is a burst of frame updates
@@ -267,8 +264,14 @@ void CefVideoConsumerOSR::OnFrameCaptured(
                                  CefVideoConsumerOSR* consumer,
                                  cef_paint_element_type_t type) {
         auto& slot = consumer->slots_[type];
-        slot.pending = std::move(gmb_handle);
 
+        if (slot.pending_callback)
+        {
+          slot.pending_callback->Done();
+          slot.pending_callback.reset();
+        }
+
+        slot.pending = std::move(gmb_handle);
         slot.current_frame_width = info->coded_size.width();
         slot.current_frame_height = info->coded_size.height();
         slot.pending_callback.Bind(std::move(callbacks));
@@ -291,10 +294,12 @@ void CefVideoConsumerOSR::OnFrameCaptured(
         if (parent) {
           CefVideoConsumerOSR* consumer = parent->GetVideoConsumer();
           if (consumer) {
+            std::scoped_lock _(consumer->frame_mutex_);
             updateFrameInfo(consumer, PET_POPUP);
           }
         }
       } else {
+        std::scoped_lock _(frame_mutex_);
         updateFrameInfo(this, PET_VIEW);
       }
     }

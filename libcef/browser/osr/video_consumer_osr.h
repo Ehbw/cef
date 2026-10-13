@@ -21,7 +21,7 @@ struct FrameSlot {
   static constexpr int kMaxDirtyRects = 10;
   // Chromium has a max of 11 inflight frames, we leave two spare so chromium
   // doesn't freak out if we have used all frames.
-  static constexpr int kMaxInflightFrames = 8;
+  static constexpr int kMaxInflightFrames = 6;
 
   struct InflightFrame
   {
@@ -47,7 +47,7 @@ struct FrameSlot {
 
   bool had_backlog;
 
-    int dirty_rects_count = 0;
+  int dirty_rects_count = 0;
   cef_rect_t dirty_rects[kMaxDirtyRects];
 
   ~FrameSlot() { 

@@ -1,0 +1,45 @@
+diff --git a/media/video/renderable_gpu_memory_buffer_video_frame_pool.cc b/media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
+index 5e025cfae4ac0..5a56685eac524 100644
+--- a/media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
++++ b/media/video/renderable_gpu_memory_buffer_video_frame_pool.cc
+@@ -305,17 +322,21 @@ InternalRefCountedPool::InternalRefCountedPool(
+ scoped_refptr<VideoFrame> InternalRefCountedPool::MaybeCreateVideoFrame(
+     const gfx::Size& visible_size,
+     const gfx::ColorSpace& color_space) {
++
++  // CFX OSR: immediately get rid of buffers that aren't compatable to reduce memory usage
++  std::erase_if(available_frame_resources_, [&](const auto& resources) {
++    return !resources->IsCompatibleWith(visible_size, color_space);
++  });
++
+   // Find or create a suitable FrameResources.
++  // CFX OSR: try to reuse the most recently released resource
++  // to keep a somewhat consistent rotation.
+   std::unique_ptr<FrameResources> frame_resources;
+-  while (!available_frame_resources_.empty()) {
+-    frame_resources = std::move(available_frame_resources_.front());
+-    available_frame_resources_.pop_front();
+-    if (!frame_resources->IsCompatibleWith(visible_size, color_space)) {
+-      frame_resources = nullptr;
+-      continue;
+-    }
+-    break;
++  if (!available_frame_resources_.empty()) {
++    frame_resources = std::move(available_frame_resources_.back());
++    available_frame_resources_.pop_back();
+   }
++
+   if (!frame_resources) {
+     frame_resources = std::make_unique<FrameResources>(this, visible_size);
+     if (!frame_resources->Initialize(format_, color_space,
+@@ -353,7 +374,9 @@ void InternalRefCountedPool::OnVideoFrameDestroyed(
+ 
+   // TODO(crbug.com/40174702): Determine if we can get away with just
+   // having 1 available frame, or if that will cause flakey underruns.
+-  constexpr size_t kMaxAvailableFrames = 2;
++  // CFX: Keep at least 4 available frames
++  // 1 for the current frame, 2 for the previous frame(s), 1 for a future frame
++  constexpr size_t kMaxAvailableFrames = 4;
+   available_frame_resources_.push_back(std::move(frame_resources));
+   while (available_frame_resources_.size() > kMaxAvailableFrames) {
+     available_frame_resources_.pop_front();
