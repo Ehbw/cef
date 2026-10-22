@@ -1301,6 +1301,8 @@ void AlloyBrowserHostImpl::WebContentsDestroyed() {
   }
 }
 
+CfxExclusiveAccessContextImpl::~CfxExclusiveAccessContextImpl() = default;
+
 Profile* CfxExclusiveAccessContextImpl::GetProfile() {
   return nullptr;
 }
@@ -1318,6 +1320,8 @@ void CfxExclusiveAccessContextImpl::ExitFullscreen() {}
 void CfxExclusiveAccessContextImpl::UpdateExclusiveAccessBubble(
     const ExclusiveAccessBubbleParams& params,
     ExclusiveAccessBubbleHideCallback first_hide_callback) {}
+
+void CfxExclusiveAccessContextImpl::UpdateUIForTabFullscreen() {}
 
 void CfxExclusiveAccessContextImpl::OnExclusiveAccessUserInput() {}
 

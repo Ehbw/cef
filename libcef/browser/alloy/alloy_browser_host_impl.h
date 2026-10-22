@@ -34,12 +34,19 @@ class ExclusiveAccessManager;
 class CfxExclusiveAccessContextImpl : public ExclusiveAccessContext {
 public:
   CfxExclusiveAccessContextImpl(CefBrowserHostBase* base);
+
+  ~CfxExclusiveAccessContextImpl() override;
   // ExclusiveAccessContext methods.
   // Returns the current profile associated with the window.
   Profile* GetProfile() override;
 
   // Returns whether the window hosting the browser view is fullscreen.
   bool IsFullscreen() const override;
+
+  // Called when we transition between tab and browser fullscreen. This method
+  // updates the UI by showing/hiding the tab strip, toolbar and bookmark bar
+  // in the browser fullscreen. Currently only supported on Mac.
+  void UpdateUIForTabFullscreen() override;
 
   // Enters fullscreen and updates the exclusive access bubble.
   void EnterFullscreen(const url::Origin& origin,
