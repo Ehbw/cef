@@ -1,8 +1,8 @@
 diff --git chrome/browser/ui/accelerator_table.cc chrome/browser/ui/accelerator_table.cc
-index 98f6531c2678d..9d6306616f5be 100644
+index 1a68ca92321945aa8e3f61755351f455f27cca73..a0d47270c24515410f0352351a02b1da3e4b01a9 100644
 --- chrome/browser/ui/accelerator_table.cc
 +++ chrome/browser/ui/accelerator_table.cc
-@@ -126,13 +126,14 @@ const AcceleratorMapping kAcceleratorMap[] = {
+@@ -134,13 +134,14 @@ const AcceleratorMapping kAcceleratorMap[] = {
  #endif  // BUILDFLAG(IS_LINUX)
      {ui::VKEY_B, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
       IDC_SHOW_BOOKMARK_BAR},
@@ -19,10 +19,10 @@ index 98f6531c2678d..9d6306616f5be 100644
      {ui::VKEY_F3, ui::EF_NONE, IDC_FIND_NEXT},
      {ui::VKEY_F3, ui::EF_SHIFT_DOWN, IDC_FIND_PREVIOUS},
 diff --git content/browser/web_contents/web_contents_impl.cc content/browser/web_contents/web_contents_impl.cc
-index dc9e636c1a64e..6ce822fe04db1 100644
+index f038e08ea02c4f60ccad698018fa7505b3dc10bd..266a9d30c6fd761bcc97a7da85656d420aa3f2b7 100644
 --- content/browser/web_contents/web_contents_impl.cc
 +++ content/browser/web_contents/web_contents_impl.cc
-@@ -4514,7 +4524,7 @@ bool WebContentsImpl::HandleKeyboardEvent(
+@@ -4870,7 +4870,7 @@ bool WebContentsImpl::HandleKeyboardEvent(
  bool WebContentsImpl::HandleWheelEvent(const blink::WebMouseWheelEvent& event) {
    OPTIONAL_TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("content.verbose"),
                          "WebContentsImpl::HandleWheelEvent");

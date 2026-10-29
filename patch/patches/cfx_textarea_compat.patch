@@ -1,8 +1,8 @@
 diff --git third_party/blink/renderer/core/dom/element.cc third_party/blink/renderer/core/dom/element.cc
-index 5ec94dee53c53..a5b0b69c4040f 100644
+index e2367fc7cabd34840e3b34f7e2e67316f1733f32..feabc6d0fa5a7bbfe2b6d52b511db9f6d3b31a06 100644
 --- third_party/blink/renderer/core/dom/element.cc
 +++ third_party/blink/renderer/core/dom/element.cc
-@@ -542,21 +542,6 @@ void EnqueueAutofocus(Element& element) {
+@@ -599,21 +599,6 @@ void EnqueueAutofocus(Element& element) {
      return;
    }
  

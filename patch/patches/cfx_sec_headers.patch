@@ -1,8 +1,8 @@
 diff --git services/network/sec_header_helpers.cc services/network/sec_header_helpers.cc
-index 64fb2172fac0d..08e43d3163adb 100644
+index dd92a9e88d53d6bfd73288cf125aec2205e59d1d..c076ebd4cd70ac72a1f382f43d9ed78a6737b708 100644
 --- services/network/sec_header_helpers.cc
 +++ services/network/sec_header_helpers.cc
-@@ -315,6 +315,8 @@ void SetFetchMetadataHeaders(
+@@ -283,6 +283,8 @@ void SetFetchMetadataHeaders(
      const mojom::URLLoaderFactoryParams& factory_params,
      const cors::OriginAccessList& origin_access_list,
      mojom::CredentialsMode credentials_mode) {
