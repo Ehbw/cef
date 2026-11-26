@@ -1,8 +1,8 @@
 diff --git media/gfx/renderable_mappable_shared_image_video_frame_pool.cc media/gfx/renderable_mappable_shared_image_video_frame_pool.cc
-index b5305162c8bb9..09ea0faa5911f 100644
+index b5305162c8bb957e6195c4145ba158dbd382dc87..7923e8cee8a8cfc7de215b3f61c8328a1cdd82dd 100644
 --- media/gfx/renderable_mappable_shared_image_video_frame_pool.cc
 +++ media/gfx/renderable_mappable_shared_image_video_frame_pool.cc
-@@ -319,16 +336,19 @@ scoped_refptr<VideoFrame> InternalRefCountedPool::MaybeCreateVideoFrame(
+@@ -319,16 +319,19 @@ scoped_refptr<VideoFrame> InternalRefCountedPool::MaybeCreateVideoFrame(
    // default ColorSpace.
    CHECK(color_space.IsValid());
    // Find or create a suitable FrameResources.
@@ -30,7 +30,7 @@ index b5305162c8bb9..09ea0faa5911f 100644
    if (!frame_resources) {
      frame_resources = std::make_unique<FrameResources>(this, visible_size);
      if (!frame_resources->Initialize(format_, color_space,
-@@ -372,7 +392,9 @@ void InternalRefCountedPool::OnVideoFrameDestroyed(
+@@ -372,7 +375,9 @@ void InternalRefCountedPool::OnVideoFrameDestroyed(
  
    // TODO(crbug.com/40174702): Determine if we can get away with just
    // having 1 available frame, or if that will cause flakey underruns.
